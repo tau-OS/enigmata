@@ -1,5 +1,5 @@
-use gtk4::prelude::*;
 use gtk4::gio;
+use gtk4::prelude::*;
 use relm4::prelude::*;
 use sourceview5::prelude::*;
 
@@ -8,6 +8,8 @@ struct AppModel {
     line: i32,
     column: i32,
     char_count: i32,
+    current_file: Option<std::path::PathBuf>,
+    buffer: sourceview5::Buffer,
 }
 
 #[derive(Debug)]
@@ -15,8 +17,10 @@ pub enum AppMsg {
     TextChanged(String),
     CursorMoved(i32, i32, i32),
     Open,
+    SetContent(String),
     Save,
     SaveAs,
+    SaveContent(String),
     Quit,
     Idk,
     About,
@@ -61,7 +65,7 @@ impl SimpleComponent for AppModel {
                     gtk::Label {
                         set_hexpand: true,
                         set_xalign: 1.0,
-                        set_text: &format!("Line {}, Column {} | Characters: {}", 
+                        set_text: &format!("Line {}, Column {} | Characters: {}",
                             model.line, model.column, model.char_count),
                         set_margin_end: 10,
                         set_margin_bottom: 5,
@@ -72,64 +76,67 @@ impl SimpleComponent for AppModel {
         }
     }
 
-fn init(
-    text: Self::Init,
-    root: Self::Root,
-    sender: ComponentSender<Self>,
-) -> ComponentParts<Self> {
-    let model = AppModel { 
-        text,
-        line: 1,
-        column: 1,
-        char_count: 0,
-    };
+    fn init(
+        text: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let buffer = sourceview5::Buffer::new(None);
 
-    let widgets = view_output!();
-    let actions = gtk4::gio::SimpleActionGroup::new();
+        let model = AppModel {
+            text,
+            line: 1,
+            column: 1,
+            char_count: 0,
+            current_file: None,
+            buffer: buffer.clone(), // Store the buffer in model
+        };
 
-    let buffer = sourceview5::Buffer::new(None);
-    widgets.source_view.set_buffer(Some(&buffer));
+        let widgets = view_output!();
+        let actions = gtk4::gio::SimpleActionGroup::new();
 
-    {
-        let sender_clone = sender.clone();
-        let status_label = widgets.status_label.clone();
-        buffer.connect_changed(move |buffer| {
-            let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
-            let char_count = text.as_str().chars().count() as i32;
-            
-            let cursor_iter = buffer.iter_at_mark(&buffer.get_insert());
-            let line = cursor_iter.line() + 1;
-            let column = cursor_iter.line_offset() + 1;
-            
-            sender_clone.input(AppMsg::CursorMoved(line, column, char_count));
-            
-            status_label.set_text(&format!(
-                "Line {}, Column {} | Characters: {}", 
-                line, column, char_count
-            ));
-        });
-    }
+        widgets.source_view.set_buffer(Some(&model.buffer));
 
-    {
-        let sender_clone = sender.clone();
-        let status_label = widgets.status_label.clone();
-        buffer.connect_mark_set(move |buffer, iter, mark| {
-            if mark.name().as_deref() == Some("insert") {
+        {
+            let sender_clone = sender.clone();
+            let status_label = widgets.status_label.clone();
+            buffer.connect_changed(move |buffer| {
                 let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
                 let char_count = text.as_str().chars().count() as i32;
-                
-                let line = iter.line() + 1;
-                let column = iter.line_offset() + 1;
-                
+
+                let cursor_iter = buffer.iter_at_mark(&buffer.get_insert());
+                let line = cursor_iter.line() + 1;
+                let column = cursor_iter.line_offset() + 1;
+
                 sender_clone.input(AppMsg::CursorMoved(line, column, char_count));
-                
+
                 status_label.set_text(&format!(
-                    "Line {}, Column {} | Characters: {}", 
+                    "Line {}, Column {} | Characters: {}",
                     line, column, char_count
                 ));
-            }
-        });
-    }
+            });
+        }
+
+        {
+            let sender_clone = sender.clone();
+            let status_label = widgets.status_label.clone();
+            buffer.connect_mark_set(move |buffer, iter, mark| {
+                if mark.name().as_deref() == Some("insert") {
+                    let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+                    let char_count = text.as_str().chars().count() as i32;
+
+                    let line = iter.line() + 1;
+                    let column = iter.line_offset() + 1;
+
+                    sender_clone.input(AppMsg::CursorMoved(line, column, char_count));
+
+                    status_label.set_text(&format!(
+                        "Line {}, Column {} | Characters: {}",
+                        line, column, char_count
+                    ));
+                }
+            });
+        }
 
         // Actions setup
         let sender_open = sender.clone();
@@ -181,7 +188,7 @@ fn init(
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             AppMsg::TextChanged(text) => {
                 self.text = text;
@@ -191,14 +198,56 @@ fn init(
                 self.column = column;
                 self.char_count = char_count;
             }
-            AppMsg::Open => {
-                println!("Open file");
+            AppMsg::SetContent(content) => {
+                self.text = content.clone();
+                self.buffer.set_text(&content);
             }
+
+            AppMsg::Open => {
+                if let Some(file_path) = rfd::FileDialog::new()
+                    .add_filter("Text files", &["txt"])
+                    .add_filter("All files", &["*"])
+                    .set_title("Open File")
+                    .pick_file()
+                {
+                    if let Ok(content) = std::fs::read_to_string(&file_path) {
+                        self.current_file = Some(file_path.clone());
+                        sender.input(AppMsg::SetContent(content));
+                        println!("File opened successfully: {}", file_path.display());
+                    }
+                }
+            }
+
             AppMsg::Save => {
                 println!("Save file");
             }
             AppMsg::SaveAs => {
-                println!("Save As");
+                if let Some(file_path) = rfd::FileDialog::new()
+                    .add_filter("Text files", &["txt"])
+                    .add_filter("All files", &["*"])
+                    .set_title("Save As")
+                    .save_file()
+                {
+                    self.current_file = Some(file_path);
+                    // Get text directly from the buffer
+                    let content = self
+                        .buffer
+                        .text(&self.buffer.start_iter(), &self.buffer.end_iter(), false)
+                        .to_string();
+                    sender.input(AppMsg::SaveContent(content));
+                }
+            }
+            AppMsg::SaveContent(content) => {
+                if let Some(file_path) = &self.current_file {
+                    match std::fs::write(file_path, &content) {
+                        Ok(_) => {
+                            println!("File saved successfully at: {}", file_path.display());
+                        }
+                        Err(e) => {
+                            println!("Error saving file: {}", e);
+                        }
+                    }
+                }
             }
             AppMsg::Quit => {
                 println!("Quitting...");
@@ -211,10 +260,12 @@ fn init(
                 let about = gtk4::AboutDialog::builder()
                     .program_name("Enigmata")
                     .version("0.1.0")
-                    .authors(vec!["Eri, written for tauOS"]
-                        .into_iter()
-                        .map(String::from)
-                        .collect::<Vec<_>>())
+                    .authors(
+                        vec!["Eri, written for tauOS"]
+                            .into_iter()
+                            .map(String::from)
+                            .collect::<Vec<_>>(),
+                    )
                     .comments("Yet Another GTK4 Text Editor")
                     .logo_icon_name("text-editor")
                     .modal(true)
