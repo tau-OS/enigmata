@@ -259,9 +259,9 @@ impl SimpleComponent for AppModel {
             AppMsg::About => {
                 let about = gtk4::AboutDialog::builder()
                     .program_name("Enigmata")
-                    .version("0.1.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .authors(
-                        vec!["Eri, written for tauOS"]
+                        vec!["Eri Ishihara <eri@nijika.dev>", "Cappy Ishihara <cappy@fyralabs.com>"]
                             .into_iter()
                             .map(String::from)
                             .collect::<Vec<_>>(),
