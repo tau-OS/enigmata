@@ -1,0 +1,11 @@
+[package]
+name = "enigmata"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gio = "0.20.7"
+glib = "0.20.7"
+gtk4 = "0.9.5"
+relm4 = "0.9.1"
+sourceview5 = "0.9.1"
