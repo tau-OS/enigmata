@@ -133,11 +133,11 @@ impl SimpleComponent for MainWindow {
                 set_vexpand: false,
                 set_css_classes: &["app-bar", "vim-status-bar"],
                 set_overflow: gtk::Overflow::Visible,
-                set_child = &gtk::Box {
-                    gtk::Label {
-                        set_label: "hiii!!!!",
-                    }
-                }
+                // set_child = &gtk::Box {
+                //     gtk::Label {
+                //         set_label: "hiii!!!!",
+                //     }
+                // }
             },
 
             #[wrap(Some)]
