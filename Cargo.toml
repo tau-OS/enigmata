@@ -8,6 +8,7 @@ gio = "0.20.7"
 glib = "0.20.7"
 gtk4 = { version = "0.9.5", features = ["gnome_47", "v4_16"] }
 libhelium = "0.10.0"
+paste = "1.0.15"
 relm4 = "0.9.1"
 rfd = "0.15.2"
 sourceview5 = "0.9.1"

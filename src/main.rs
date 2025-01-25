@@ -5,10 +5,12 @@ use std::path::PathBuf;
 use gtk4::gio;
 use gtk4::prelude::*;
 use libhelium::prelude::*;
+use relm4::main_application;
 use relm4::prelude::*;
 use sourceview5::prelude::ViewExt;
 // use sourceview5::prelude::BufferExt;
 use sourceview5::prelude::*;
+mod shortcuts;
 
 struct AppModel {
     text: String,
@@ -23,6 +25,12 @@ struct AppModel {
 
     /// The actual text input buffer
     buffer: sourceview5::Buffer,
+
+    /// Search entry for searching and replacing text
+    search_entry: gtk::SearchEntry,
+
+    /// GTKSourceView search context
+    search_context: sourceview5::SearchContext,
 
     /// Indicates if the buffer has unsaved changes, AKA "dirty"
     is_dirty: bool,
@@ -50,6 +58,9 @@ pub enum AppMsg {
     Idk,
     /// Displays about dialog
     About,
+
+    /// Find/Search
+    Find,
 
     // Messages for i/o
     /// Load file to buffer
@@ -156,80 +167,120 @@ impl SimpleComponent for AppModel {
                 // #[watch]
                 // set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
             },
+            // #[wrap(Some)]
+            // set_child = &libhelium::OverlayButton {
+
+            //     #[wrap(Some)]
+            //     set_focus_child = &gtk::Box {},
+            //     // add_child: (&gtk::Builder::default(), &gtk::Box::default(),None)
+            // },
+            //
+            // #[wrap(Some)]
+            // #[name = "overlay"]
             #[wrap(Some)]
-            set_child = &libhelium::OverlayButton {
-
-                #[wrap(Some)]
-                set_focus_child = &gtk::Box {},
-                // add_child: (&gtk::Builder::default(), &gtk::Box::default(),None)
-            },
-
-            #[wrap(Some)]
-            #[name = "main_view"]
-            set_child = &gtk::Box  {
-                set_orientation: gtk::Orientation::Vertical,
-
-                gtk::ScrolledWindow {
-                    set_vexpand: true,
-                    set_hexpand: true,
-                    set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                    #[name = "source_view"]
-                    sourceview5::View {
-                        set_expand: true,
-                        set_input_purpose: gtk::InputPurpose::FreeForm,
-                        set_wrap_mode: gtk::WrapMode::WordChar,
-                        set_show_line_numbers: true,
-                        set_highlight_current_line: true,
-                        set_monospace: true,
-                        set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+            set_child = &gtk::Overlay {
+                set_hexpand: true,
+                set_vexpand: true,
+                
+                add_overlay = &gtk::Box {
+                    set_halign: gtk::Align::Center,
+                    set_valign: gtk::Align::Center,
+                    set_overflow: gtk::Overflow::Visible,
+                    gtk::Label {
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_label: "hello, world",
                     },
                 },
-                #[name = "status_bar"]
-                // XXX: I don't think I'm supposed to use this BottomBar for this...
-                libhelium::BottomBar {
-                    set_css_classes: &["vim-status-bar"],
-                    // set_align: gtk::Align::BaselineFill,
-                    set_expand: false,
-                    // set_: asdasd,
-                    //
-                    set_menu_model: &gtk4::gio::MenuModel::from(build_menu()),
-                    #[watch]
-                    set_title: &format!("{}{}",
-                        model.current_file.clone().map(|f| f.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "Untitled".to_string()),
-                        if model.is_dirty { "*" } else { "" }
-                    ),
-                    #[watch]
-                    set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
-                    // set_title: "Test",
-                    // set_t
-
-
-                    #[name = "status_menu"]
-                    set_child = &gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_spacing: 6,
-                        set_margin_all: 12,
-
-                        #[name = "open_button_shortcut"]
-                        prepend = &libhelium::Button {
-                            set_is_pill: true,
-                            set_is_tint: true,
-                            set_css_classes: &["app-bar-button", "rounded"],
-                            set_tooltip_text: Some("Open file..."),
-                            // set_label: "Open",
-                            set_icon_name: "document-open-symbolic",
-                            set_is_iconic: true,
-                            connect_clicked[sender] => move |_| {
-                                sender.input(AppMsg::Open);
-                            },
+                #[wrap(Some)]
+                #[name = "main_view"]
+                set_child = &gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+    
+                    // gtk::Overlay {
+                    //     set_hexpand: true,
+                    //     set_vexpand: true,
+                    //     set_overflow: gtk::Overflow::Visible,
+                    //     add_overlay = &gtk::Box {
+                    //         set_halign: gtk::Align::Center,
+                    //         set_valign: gtk::Align::Center,
+                    //         gtk::Label {
+                    //             set_halign: gtk::Align::Center,
+                    //             set_valign: gtk::Align::Center,
+                    //             set_label: "hello, world",
+                    //         },
+                    //     },
+                    // },
+    
+                    gtk::ScrolledWindow {
+                        set_vexpand: true,
+                        set_hexpand: true,
+                        set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                        #[name = "source_view"]
+                        sourceview5::View {
+                            set_expand: true,
+                            set_input_purpose: gtk::InputPurpose::FreeForm,
+                            set_wrap_mode: gtk::WrapMode::WordChar,
+                            set_show_line_numbers: true,
+                            set_highlight_current_line: true,
+                            set_monospace: true,
+                            set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+                            // set_extra_menu: Some(&{
+                            //     let menu: gtk4::gio::MenuModel = build_menu().into();
+                            //     menu
+                            // }),
                         },
-
-                        // end status menu
                     },
-                    // end bottombar
+    
+                    #[name = "status_bar"]
+                    // XXX: I don't think I'm supposed to use this BottomBar for this...
+                    libhelium::BottomBar {
+                        set_css_classes: &["vim-status-bar"],
+                        // set_align: gtk::Align::BaselineFill,
+                        set_expand: false,
+                        // set_: asdasd,
+                        //
+                        set_menu_model: &gtk4::gio::MenuModel::from(build_menu()),
+                        #[watch]
+                        set_title: &format!("{}{}",
+                            model.current_file.clone().map(|f| f.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "Untitled".to_string()),
+                            if model.is_dirty { "*" } else { "" }
+                        ),
+                        #[watch]
+                        set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
+                        // set_title: "Test",
+                        // set_t
+    
+    
+                        #[name = "status_menu"]
+                        set_child = &gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 6,
+                            set_margin_all: 12,
+    
+                            #[name = "open_button_shortcut"]
+                            prepend = &libhelium::Button {
+                                set_is_pill: true,
+                                set_is_tint: true,
+                                set_css_classes: &["app-bar-button", "rounded"],
+                                set_tooltip_text: Some("Open file..."),
+                                // set_label: "Open",
+                                set_icon_name: "document-open-symbolic",
+                                set_is_iconic: true,
+                                connect_clicked[sender] => move |_| {
+                                    sender.input(AppMsg::Open);
+                                },
+                            },
+    
+                            // end status menu
+                        },
+                        // end bottombar
+                    }
                 }
-            }
+              
+              
+            },
         }
     }
 
@@ -242,9 +293,10 @@ impl SimpleComponent for AppModel {
         let style_scheme = sourceview5::StyleSchemeManager::default().scheme("classic-dark");
         let buffer = sourceview5::Buffer::new(None);
         buffer.set_style_scheme(style_scheme.as_ref());
-        // language.guess_language(filename, content_type)
-        let event_controller = gtk::EventControllerKey::builder()
-            .name("key-controller")
+
+        let search_entry = gtk::SearchEntry::new();
+        let search_context = sourceview5::SearchContext::builder()
+            .buffer(&buffer)
             .build();
 
         let model = AppModel {
@@ -256,13 +308,12 @@ impl SimpleComponent for AppModel {
             buffer: buffer.clone(), // Store the buffer in model
             is_dirty: false,
             file_hash: None,
+            search_entry: search_entry.clone(),
+            search_context: search_context.clone(),
         };
 
         let widgets = view_output!();
-        let actions = gtk4::gio::SimpleActionGroup::new();
-
         widgets.source_view.set_buffer(Some(&model.buffer));
-        
 
         {
             let sender_clone = sender.clone();
@@ -306,128 +357,63 @@ impl SimpleComponent for AppModel {
             });
         }
 
+        let shortcutman = shortcuts::ShortcutManager::default();
+        crate::gen_shortcut!(shortcutman sender);
+
         // Actions setup
-        let sender_open = sender.clone();
-        let action_open = gtk4::gio::SimpleAction::new("open", None);
-        action_open.connect_activate(move |_, _| {
-            sender_open.input(AppMsg::Open);
+        shortcut!("<Primary>o" => Open);
+        shortcut!("<Primary>s" => Save);
+        shortcut!("<Primary><Shift>s" => SaveAs);
+        shortcut!("<Primary>q|<Primary>w" => Quit);
+        shortcut!("<Primary>equal" => ZoomIn => {
+            println!("Zoom in");
         });
-        actions.add_action(&action_open);
-
-        let sender_save = sender.clone();
-        let action_save = gtk4::gio::SimpleAction::new("save", None);
-        action_save.connect_activate(move |_, _| {
-            sender_save.input(AppMsg::Save);
+        shortcut!("<Primary>minus" => ZoomOut => {
+            println!("Zoom out");
         });
-        actions.add_action(&action_save);
-
-        let sender_saveas = sender.clone();
-        let action_saveas = gtk4::gio::SimpleAction::new("saveas", None);
-        action_saveas.connect_activate(move |_, _| {
-            sender_saveas.input(AppMsg::SaveAs);
-        });
-        actions.add_action(&action_saveas);
-
-        let sender_quit = sender.clone();
-        let action_exit = gtk4::gio::SimpleAction::new("exit", None);
-        action_exit.connect_activate(move |_, _| {
-            sender_quit.input(AppMsg::Quit);
-        });
-        actions.add_action(&action_exit);
+        shortcut!("<Primary>f" => Find);
 
         let sender_idk = sender.clone();
         let action_idk = gtk4::gio::SimpleAction::new("idk", None);
         action_idk.connect_activate(move |_, _| {
             sender_idk.input(AppMsg::Idk);
         });
-        actions.add_action(&action_idk);
+        shortcutman.actions.add_action(&action_idk);
 
         let sender_about = sender.clone();
         let action_about = gtk4::gio::SimpleAction::new("about", None);
         action_about.connect_activate(move |_, _| {
             sender_about.input(AppMsg::About);
         });
-        actions.add_action(&action_about);
+        shortcutman.actions.add_action(&action_about);
 
         let sender_selectstylescheme = sender.clone();
         let action_selectstylescheme = gtk4::gio::SimpleAction::new("selectstylescheme", None);
         action_selectstylescheme.connect_activate(move |_, _| {
             sender_selectstylescheme.input(AppMsg::SelectStyleScheme);
         });
-        actions.add_action(&action_selectstylescheme);
-        
-        
-        let shortcut_controller = gtk::ShortcutController::new();
-        
-        let kb_shortcut_open = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>o").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.open)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_open);
-        
-        let kb_shortcut_save = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>s").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.save)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_save);
-        
-        let kb_shortcut_saveas = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary><Shift>s").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.saveas)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_saveas);
-        
-        let kb_shortcut_quit = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>q|<Primary>w").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.exit)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_quit);
-        
-        
-        
-        let zoomin_action = gtk4::gio::SimpleAction::new("zoomin", None);
-        zoomin_action.connect_activate(move |_, _| {
-            println!("Zoom in");
-            // widgets.source_view.font_size_relative(1.0);
-        });
-        actions.add_action(&zoomin_action);
-        
-        let kb_shortcut_zoomin = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>equal").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.zoomin)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_zoomin);
+        shortcutman.actions.add_action(&action_selectstylescheme);
 
-        
-        let zoomout_action = gtk4::gio::SimpleAction::new("zoomout", None);
-        zoomout_action.connect_activate(move |_, _| {
-            println!("Zoom out");
-            // widgets.source_view.font_size_relative(-1.0);
-        });
-        actions.add_action(&zoomout_action);
-        
-        let kb_shortcut_zoomout = gtk4::Shortcut::builder()
-            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>minus").unwrap())
-            .action(&gtk4::ShortcutAction::parse_string("action(app.zoomout)").unwrap())
-            .build();
-        shortcut_controller.add_shortcut(kb_shortcut_zoomout);
-
-        
-        
-
-        
-        
-
-        widgets.source_view.add_controller(shortcut_controller);
+        widgets.source_view.add_controller(shortcutman.shortcut_ctl);
         widgets
             .main_window
-            .insert_action_group("app", Some(&actions));
+            .insert_action_group("app", Some(&shortcutman.actions));
+
+        main_application().connect_open(move |app, files, _| {
+            app.activate();
+            if let Some(file_path) = files.first().and_then(|file| file.path()) {
+                sender.input(AppMsg::LoadBuffer(file_path));
+            }
+        });
 
         ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
+            AppMsg::Find => {
+                // self.search_context.
+            }
             AppMsg::TextChanged(text) => {
                 self.text = text;
                 // Mark buffer as dirty if we hashed the current buffer
@@ -460,19 +446,19 @@ impl SimpleComponent for AppModel {
             }
             // Load file to buffer
             AppMsg::LoadBuffer(file_path) => {
-                if let Ok(content) = std::fs::read(&file_path) {
-                    let content = String::from_utf8_lossy(&content).into_owned();
-                    self.current_file = Some(file_path.clone());
-                    sender.input(AppMsg::SetBufferData(content));
-                    println!("File opened successfully: {}", file_path.display());
-                    // Mark buffer as clean until changes are made
-                    self.is_dirty = false;
-                    // Set text highlighting
-                    let lang = self.guess_language_from_file();
-                    sender.input(AppMsg::SetLanguage(lang));
-                }
+                let Ok(content) = std::fs::read(&file_path) else {
+                    return;
+                };
+                let content = String::from_utf8_lossy(&content).into_owned();
+                self.current_file = Some(file_path.clone());
+                sender.input(AppMsg::SetBufferData(content));
+                println!("File opened successfully: {}", file_path.display());
+                // Mark buffer as clean until changes are made
+                self.is_dirty = false;
+                // Set text highlighting
+                let lang = self.guess_language_from_file();
+                sender.input(AppMsg::SetLanguage(lang));
             }
-
             AppMsg::Open => {
                 let file_filter = gtk::FileFilter::new();
                 file_filter.add_mime_type("text/*");
