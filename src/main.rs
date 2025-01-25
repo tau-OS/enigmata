@@ -522,10 +522,28 @@ impl SimpleComponent for AppModel {
                         //     ("Cancel", gtk::ResponseType::Cancel),
                         // ])
                         // .buttons(gtk::ButtonsType::YesNoCancel)
-                        .cancel_button(3)
+                        .buttons(vec!["Close without saving", "Cancel", "Save"])
+                        .cancel_button(2)
+                        .default_button(3)
                         .modal(true)
                         .build();
-                    alert.show(None::<&gtk::Window>);
+                    alert.choose(None::<&gtk::Window>, None::<&gio::Cancellable>, move |response| {
+                        if let Ok(res) = response {
+                            match res {
+                                0 => {
+                                    std::process::exit(0);
+                                }
+                                1 => {
+                                    // Cancel
+                                }
+                                2 => {
+                                    sender.input(AppMsg::Save);
+                                }
+                                _ => {}
+                            }
+                        }
+                    });
+                    // alert.show(None::<&gtk::Window>);
                 } else {
                     std::process::exit(0);
                 }
