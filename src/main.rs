@@ -106,6 +106,8 @@ impl SimpleComponent for AppModel {
     view! {
         main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
+            set_icon_name: Some("accessories-text-editor"),
+            set_show_menubar: true,
 
             connect_close_request[sender] => move |_| {
                 sender.input(AppMsg::Quit);
@@ -118,20 +120,26 @@ impl SimpleComponent for AppModel {
                 set_is_compact: true,
                 set_show_left_title_buttons: true,
                 set_show_right_title_buttons: true,
+                set_halign: gtk::Align::BaselineFill,
                 
                 
                 #[wrap(Some)]
                 #[name = "viewtitle_widget"]
                 set_viewtitle_widget = &gtk::Box {
-                    // set_orientation: gtk::Orientation::Horizontal,
-                    // set_expand: true,
-                    // #[name = "viewtitle_label"]
-                    // gtk::Label {
-                    //     set_text: "Enigmata",
-                    //     set_halign: gtk::Align::Center,
-                    //     set_margin_start: 12,
-                    //     // set_: true,
-                    // },
+                    set_orientation: gtk::Orientation::Horizontal,
+                    set_halign: gtk::Align::End,
+                    set_expand: true,
+                    gtk::MenuButton {
+                        // set_halign: gtk::Align::End,
+                        // set_label: "File",
+                        // todo: Separate menus for this part, we don't want to reuse the same menus
+                        // Maybe the bottom bar menu can be for file ops, and the title bar can be for other stuff
+                        set_icon_name: "open-menu-symbolic",
+                        set_menu_model: Some(&{
+                            let menu: gtk4::gio::MenuModel = build_menu().into();
+                            menu
+                        }),
+                    },
                 },
 
                 // #[watch]
