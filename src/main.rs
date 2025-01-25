@@ -2,7 +2,6 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::PathBuf;
 
-use glib::language_names;
 use gtk4::gio;
 use gtk4::prelude::*;
 use libhelium::prelude::*;
@@ -10,6 +9,7 @@ use relm4::prelude::*;
 use sourceview5::prelude::ViewExt;
 // use sourceview5::prelude::BufferExt;
 use sourceview5::prelude::*;
+
 struct AppModel {
     text: String,
     line: i32,
@@ -56,10 +56,10 @@ pub enum AppMsg {
     LoadBuffer(PathBuf),
     /// Save buffer to file
     SaveBuffer(PathBuf, String),
-    
+
     SetStyleScheme(sourceview5::StyleScheme),
     SelectStyleScheme,
-    
+
     /// Set text highlighting language
     SetLanguage(Option<sourceview5::Language>),
 }
@@ -73,12 +73,12 @@ impl AppModel {
             .unwrap_or_else(|| UNTITLED)
             .to_string()
     }
-    
+
     fn guess_language_from_file(&self) -> Option<sourceview5::Language> {
         let langman = sourceview5::LanguageManager::default();
-        
+
         let file_path = self.current_file.as_ref();
-        
+
         let l = langman.guess_language(file_path, None);
         println!("Guessing language: {:?}", l);
         l
@@ -104,10 +104,12 @@ impl SimpleComponent for AppModel {
     type Output = ();
 
     view! {
+        #[root]
         main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
             set_icon_name: Some("accessories-text-editor"),
             set_show_menubar: true,
+            set_decorated: true,
 
             connect_close_request[sender] => move |_| {
                 sender.input(AppMsg::Quit);
@@ -121,44 +123,51 @@ impl SimpleComponent for AppModel {
                 set_show_left_title_buttons: true,
                 set_show_right_title_buttons: true,
                 set_halign: gtk::Align::BaselineFill,
-                
-                
-                #[wrap(Some)]
-                #[name = "viewtitle_widget"]
-                set_viewtitle_widget = &gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_halign: gtk::Align::End,
-                    set_expand: true,
-                    gtk::MenuButton {
-                        // set_halign: gtk::Align::End,
-                        // set_label: "File",
-                        // todo: Separate menus for this part, we don't want to reuse the same menus
-                        // Maybe the bottom bar menu can be for file ops, and the title bar can be for other stuff
-                        set_icon_name: "open-menu-symbolic",
-                        set_menu_model: Some(&{
-                            let menu: gtk4::gio::MenuModel = build_menu().into();
-                            menu
-                        }),
-                    },
-                },
+                set_expand: false,
+                // append_menu: &{
+                //     let menu: gtk4::gio::MenuModel = build_menu().into();
+                //     menu
+                // },
+
+                // #[wrap(Some)]
+                // #[name = "viewtitle_widget"]
+                // append_menu = &gtk::MenuButton {}
+
+                // append_menu = &gtk::Box {
+                //     set_orientation: gtk::Orientation::Horizontal,
+                //     set_halign: gtk::Align::End,
+                //     set_expand: true,
+                //     gtk::MenuButton {
+                //         // set_halign: gtk::Align::End,
+                //         // set_label: "File",
+
+                //         // todo: Separate menus for this part, we don't want to reuse the same menus
+                //         // Maybe the bottom bar menu can be for file ops, and the title bar can be for other stuff
+                //         set_icon_name: "open-menu-symbolic",
+                //         // set_is_iconic: true,
+                //         // set_css_classes: &["titlebar-menu", "iconic"],
+                //         set_menu_model: Some(&{
+                //             let menu: gtk4::gio::MenuModel = build_menu().into();
+                //             menu
+                //         }),
+                //     },
+                // },
 
                 // #[watch]
                 // set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+            },
+            #[wrap(Some)]
+            set_child = &libhelium::OverlayButton {
+
+                #[wrap(Some)]
+                set_focus_child = &gtk::Box {},
+                // add_child: (&gtk::Builder::default(), &gtk::Box::default(),None)
             },
 
             #[wrap(Some)]
             #[name = "main_view"]
             set_child = &gtk::Box  {
                 set_orientation: gtk::Orientation::Vertical,
-                // set_spacing: 0,
-
-                // gtk::PopoverMenuBar::from_model(Some(&{
-                //     let menu: gtk4::gio::MenuModel = build_menu().into();
-                //     menu
-                // })) {
-                //     set_expand: false,
-                //     set_: 10,
-                // },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
@@ -173,12 +182,8 @@ impl SimpleComponent for AppModel {
                         set_highlight_current_line: true,
                         set_monospace: true,
                         set_background_pattern: sourceview5::BackgroundPatternType::Grid,
-                        // set_sty: Some(&sourceview5::StyleScheme::new_from_builtin(sourceview5::StyleSchemeName::Classic)),
                     },
                 },
-                // #[name = "status_bar_test"]
-                // libhelium::T
-                
                 #[name = "status_bar"]
                 // XXX: I don't think I'm supposed to use this BottomBar for this...
                 libhelium::BottomBar {
@@ -186,11 +191,8 @@ impl SimpleComponent for AppModel {
                     // set_align: gtk::Align::BaselineFill,
                     set_expand: false,
                     // set_: asdasd,
-                    // 
-                    set_menu_model: &{
-                        let menu: gtk4::gio::MenuModel = build_menu().into();
-                        menu
-                    },
+                    //
+                    set_menu_model: &gtk4::gio::MenuModel::from(build_menu()),
                     #[watch]
                     set_title: &format!("{}{}",
                         model.current_file.clone().map(|f| f.to_string_lossy().to_string())
@@ -201,8 +203,8 @@ impl SimpleComponent for AppModel {
                     set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
                     // set_title: "Test",
                     // set_t
-                    
-                    
+
+
                     #[name = "status_menu"]
                     set_child = &gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
@@ -210,18 +212,22 @@ impl SimpleComponent for AppModel {
                         set_margin_all: 12,
 
                         #[name = "open_button_shortcut"]
-                        libhelium::Button {
+                        prepend = &libhelium::Button {
                             set_is_pill: true,
                             set_is_tint: true,
                             set_css_classes: &["app-bar-button", "rounded"],
                             set_tooltip_text: Some("Open file..."),
                             // set_label: "Open",
                             set_icon_name: "document-open-symbolic",
+                            set_is_iconic: true,
                             connect_clicked[sender] => move |_| {
                                 sender.input(AppMsg::Open);
                             },
-                        }
+                        },
+
+                        // end status menu
                     },
+                    // end bottombar
                 }
             }
         }
@@ -233,11 +239,13 @@ impl SimpleComponent for AppModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         use sourceview5::prelude::BufferExt;
-        let style_scheme = sourceview5::StyleSchemeManager::default()
-            .scheme("classic-dark");
+        let style_scheme = sourceview5::StyleSchemeManager::default().scheme("classic-dark");
         let buffer = sourceview5::Buffer::new(None);
         buffer.set_style_scheme(style_scheme.as_ref());
         // language.guess_language(filename, content_type)
+        let event_controller = gtk::EventControllerKey::builder()
+            .name("key-controller")
+            .build();
 
         let model = AppModel {
             text,
@@ -254,6 +262,7 @@ impl SimpleComponent for AppModel {
         let actions = gtk4::gio::SimpleActionGroup::new();
 
         widgets.source_view.set_buffer(Some(&model.buffer));
+        
 
         {
             let sender_clone = sender.clone();
@@ -339,14 +348,77 @@ impl SimpleComponent for AppModel {
             sender_about.input(AppMsg::About);
         });
         actions.add_action(&action_about);
-        
+
         let sender_selectstylescheme = sender.clone();
         let action_selectstylescheme = gtk4::gio::SimpleAction::new("selectstylescheme", None);
         action_selectstylescheme.connect_activate(move |_, _| {
             sender_selectstylescheme.input(AppMsg::SelectStyleScheme);
         });
         actions.add_action(&action_selectstylescheme);
+        
+        
+        let shortcut_controller = gtk::ShortcutController::new();
+        
+        let kb_shortcut_open = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>o").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.open)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_open);
+        
+        let kb_shortcut_save = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>s").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.save)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_save);
+        
+        let kb_shortcut_saveas = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary><Shift>s").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.saveas)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_saveas);
+        
+        let kb_shortcut_quit = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>q|<Primary>w").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.exit)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_quit);
+        
+        
+        
+        let zoomin_action = gtk4::gio::SimpleAction::new("zoomin", None);
+        zoomin_action.connect_activate(move |_, _| {
+            println!("Zoom in");
+            // widgets.source_view.font_size_relative(1.0);
+        });
+        actions.add_action(&zoomin_action);
+        
+        let kb_shortcut_zoomin = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>equal").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.zoomin)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_zoomin);
 
+        
+        let zoomout_action = gtk4::gio::SimpleAction::new("zoomout", None);
+        zoomout_action.connect_activate(move |_, _| {
+            println!("Zoom out");
+            // widgets.source_view.font_size_relative(-1.0);
+        });
+        actions.add_action(&zoomout_action);
+        
+        let kb_shortcut_zoomout = gtk4::Shortcut::builder()
+            .trigger(&gtk4::ShortcutTrigger::parse_string("<Primary>minus").unwrap())
+            .action(&gtk4::ShortcutAction::parse_string("action(app.zoomout)").unwrap())
+            .build();
+        shortcut_controller.add_shortcut(kb_shortcut_zoomout);
+
+        
+        
+
+        
+        
+
+        widgets.source_view.add_controller(shortcut_controller);
         widgets
             .main_window
             .insert_action_group("app", Some(&actions));
@@ -455,7 +527,7 @@ impl SimpleComponent for AppModel {
                     // .action(gtk::FileChooserAction::Save)
                     // .name("Save File")
                     // .modal(true)
-                    .title("Save File")
+                    .title("Save as...")
                     .initial_name(&self.default_file_name())
                     .build();
 
@@ -527,22 +599,26 @@ impl SimpleComponent for AppModel {
                         .default_button(3)
                         .modal(true)
                         .build();
-                    alert.choose(None::<&gtk::Window>, None::<&gio::Cancellable>, move |response| {
-                        if let Ok(res) = response {
-                            match res {
-                                0 => {
-                                    std::process::exit(0);
+                    alert.choose(
+                        None::<&gtk::Window>,
+                        None::<&gio::Cancellable>,
+                        move |response| {
+                            if let Ok(res) = response {
+                                match res {
+                                    0 => {
+                                        std::process::exit(0);
+                                    }
+                                    1 => {
+                                        // Cancel
+                                    }
+                                    2 => {
+                                        sender.input(AppMsg::Save);
+                                    }
+                                    _ => {}
                                 }
-                                1 => {
-                                    // Cancel
-                                }
-                                2 => {
-                                    sender.input(AppMsg::Save);
-                                }
-                                _ => {}
                             }
-                        }
-                    });
+                        },
+                    );
                     // alert.show(None::<&gtk::Window>);
                 } else {
                     std::process::exit(0);
@@ -553,16 +629,14 @@ impl SimpleComponent for AppModel {
             AppMsg::Idk => {
                 println!("IDK clicked");
             }
-            
+
             AppMsg::SetStyleScheme(scheme) => {
                 println!("Setting style scheme: {:?}", scheme.id());
                 self.buffer.set_style_scheme(Some(&scheme));
             }
             AppMsg::SelectStyleScheme => {
-                let style_scheme = sourceview5::StyleSchemeChooserWidget::builder()
-                    
-                    .build();
-                
+                // let style_scheme = sourceview5::StyleSchemeChooserWidget::builder().build();
+
                 relm4::view! {
                     // style_scheme = sourceview5::StyleSchemeChooserButton {
                     // },
@@ -576,7 +650,7 @@ impl SimpleComponent for AppModel {
                         //         sender.input(AppMsg::SetStyleScheme(scheme));
                         //     }
                         // },
-                        // 
+                        //
                         gtk::ScrolledWindow {
                             set_vexpand: true,
                             set_hexpand: true,
@@ -591,10 +665,10 @@ impl SimpleComponent for AppModel {
                         },
 
                     },
-                    
-                    // style_chooser = 
+
+                    // style_chooser =
                 }
-                
+
                 window.present();
                 // sender.input(AppMsg::SetStyleScheme(style_scheme));
             }
@@ -634,7 +708,10 @@ fn build_menu() -> gio::Menu {
     file_menu.append_item(&gio::MenuItem::new(Some("Save"), Some("app.save")));
     file_menu.append_item(&gio::MenuItem::new(Some("Save As"), Some("app.saveas")));
     enigmata_menu.append_item(&gio::MenuItem::new(Some("Exit"), Some("app.exit")));
-    enigmata_menu.append_item(&gio::MenuItem::new(Some("Set Style Scheme"), Some("app.selectstylescheme")));
+    enigmata_menu.append_item(&gio::MenuItem::new(
+        Some("Set Style Scheme"),
+        Some("app.selectstylescheme"),
+    ));
 
     // file_menu.append_item(&gio::MenuItem::new(Some("Nothing yet..."), Some("app.idk")));
 
