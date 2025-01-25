@@ -1,8 +1,8 @@
 use gtk4::gio;
 use gtk4::prelude::*;
+use libhelium::prelude::*;
 use relm4::prelude::*;
-use sourceview5::prelude::*;
-
+use sourceview5::prelude::ViewExt;
 struct AppModel {
     text: String,
     line: i32,
@@ -33,11 +33,19 @@ impl SimpleComponent for AppModel {
     type Output = ();
 
     view! {
-        main_window = gtk::Window {
+        main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
-            set_default_size: (1280, 720),
 
-            gtk::Box {
+            set_default_size: (1280, 720),
+            #[wrap(Some)]
+            set_titlebar = &libhelium::AppBar {
+                set_is_compact: true,
+                #[watch]
+                set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+            },
+
+            #[wrap(Some)]
+            set_child = &gtk::Box  {
                 set_orientation: gtk::Orientation::Vertical,
                 set_spacing: 0,
 
@@ -57,21 +65,24 @@ impl SimpleComponent for AppModel {
                     set_monospace: true,
                     set_background_pattern: sourceview5::BackgroundPatternType::Grid,
                 },
+                libhelium::BottomBar {
+                    set_halign: gtk::Align::End,
+                    set_child = &gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-
-                    #[name = "status_label"]
-                    gtk::Label {
-                        set_hexpand: true,
-                        set_xalign: 1.0,
-                        set_text: &format!("Line {}, Column {} | Characters: {}",
-                            model.line, model.column, model.char_count),
-                        set_margin_end: 10,
-                        set_margin_bottom: 5,
-                        set_margin_top: 5,
+                        #[name = "status_label"]
+                        gtk::Label {
+                            set_hexpand: true,
+                            set_xalign: 1.0,
+                            set_text: &format!("Line {}, Column {} | Characters: {}",
+                                model.line, model.column, model.char_count),
+                            set_margin_end: 10,
+                            set_margin_bottom: 5,
+                            set_margin_top: 5,
+                        }
                     }
                 }
+
             }
         }
     }
@@ -204,6 +215,7 @@ impl SimpleComponent for AppModel {
             }
 
             AppMsg::Open => {
+                // todo: switch to GTK file dialog
                 if let Some(file_path) = rfd::FileDialog::new()
                     .add_filter("Text files", &["txt"])
                     .add_filter("All files", &["*"])
@@ -219,8 +231,17 @@ impl SimpleComponent for AppModel {
             }
 
             AppMsg::Save => {
-                println!("Save file");
+                if let Some(_file_path) = &self.current_file {
+                    let content = self
+                        .buffer
+                        .text(&self.buffer.start_iter(), &self.buffer.end_iter(), false)
+                        .to_string();
+                    sender.input(AppMsg::SaveContent(content));
+                } else {
+                    sender.input(AppMsg::SaveAs);
+                }
             }
+
             AppMsg::SaveAs => {
                 if let Some(file_path) = rfd::FileDialog::new()
                     .add_filter("Text files", &["txt"])
@@ -257,17 +278,23 @@ impl SimpleComponent for AppModel {
                 println!("IDK clicked");
             }
             AppMsg::About => {
-                let about = gtk4::AboutDialog::builder()
-                    .program_name("Enigmata")
+                let about = libhelium::AboutWindow::builder()
+                    .app_name("Enigmata")
+                    .app_id(APP_ID)
                     .version(env!("CARGO_PKG_VERSION"))
-                    .authors(
-                        vec!["Eri Ishihara <eri@nijika.dev>", "Cappy Ishihara <cappy@fyralabs.com>"]
-                            .into_iter()
-                            .map(String::from)
-                            .collect::<Vec<_>>(),
+                    .developer_names(
+                        vec![
+                            "Eri Ishihara <eri@nijika.dev>",
+                            "Cappy Ishihara <cappy@fyralabs.com>",
+                        ]
+                        .into_iter()
+                        .map(String::from)
+                        .collect::<Vec<_>>(),
                     )
-                    .comments("Yet Another GTK4 Text Editor")
-                    .logo_icon_name("text-editor")
+                    // .comments("Yet Another GTK4 Text Editor")
+                    .copyright_year(2025)
+                    .name("Enigmata")
+                    .icon("accessories-text-editor")
                     .modal(true)
                     .build();
 
@@ -299,7 +326,23 @@ fn build_menu() -> gio::Menu {
     menu
 }
 
+const APP_ID: &str = "com.fyralabs.enigmata";
+use gtk4::glib::translate::FromGlibPtrNone;
 fn main() {
-    let app = RelmApp::new("tau.eri.enigmata");
+    let happ = libhelium::Application::builder()
+        .application_id(APP_ID)
+        .flags(libhelium::gtk::gio::ApplicationFlags::default())
+        .default_accent_color(unsafe {
+            &libhelium::RGBColor::from_glib_none(std::ptr::from_mut(
+                &mut libhelium::ffi::HeRGBColor {
+                    r: 0.0,
+                    g: 7.0,
+                    b: 143.0,
+                },
+            ))
+        })
+        .build();
+
+    let app = RelmApp::from_app(happ);
     app.run::<AppModel>("".to_string());
 }
