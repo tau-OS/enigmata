@@ -181,7 +181,7 @@ impl SimpleComponent for MainWindow {
                 }, // gtk::Box 
                 #[name = "status_bar"]
                 libhelium::BottomBar {
-                    set_css_classes: &["vim-status-bar", "compact"],
+                    set_css_classes: &["compact"],
                     // set_align: gtk::Align::BaselineFill,
                     set_expand: false,
                     // set_: asdasd,
@@ -198,9 +198,11 @@ impl SimpleComponent for MainWindow {
                     set_widget_name: "status_bar",
                     #[name = "open_button_shortcut"]
                     prepend_button[libhelium::BottomBarPosition::Left] = &libhelium::Button {
+                        
                         set_is_pill: true,
-                        set_is_tint: true,
-                        set_css_classes: &["app-bar-button", "rounded"],
+                        // set_is_tint: true,
+                        set_css_classes: &["circular"],
+                        set_margin_horizontal: 8,
                         set_tooltip_text: Some("Open file..."),
                         // set_label: "Open",
                         set_icon_name: "document-open-symbolic",
@@ -212,10 +214,11 @@ impl SimpleComponent for MainWindow {
                     
                     #[name = "search_button_shortcut"]
                     append_button[libhelium::BottomBarPosition::Right] = &libhelium::Button {
-                        set_is_pill: true,
-                        set_is_tint: true,
-                        set_css_classes: &["app-bar-button", "rounded"],
+                        // set_is_pill: true,
+                        // set_is_tint: true,
+                        set_css_classes: &["circular"],
                         set_tooltip_text: Some("Search..."),
+                        set_margin_horizontal: 8,
                         // set_label: "Search",
                         set_icon_name: "edit-find-symbolic",
                         set_is_iconic: true,
@@ -608,7 +611,7 @@ impl SimpleComponent for MainWindow {
                         set_issue_url: Some("https://github.com/tau-OS/enigmata/issues"),
                         set_more_info_url: Some("https://github.com/tau-OS/enigmata"),
                         set_icon: "accessories-text-editor",
-
+                        set_license: libhelium::AboutWindowLicenses::Gplv3,
                     }
                 };
 
