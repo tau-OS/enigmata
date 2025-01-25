@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use gtk4::gio;
 use gtk4::prelude::*;
 use libhelium::prelude::*;
@@ -14,16 +16,43 @@ struct AppModel {
 
 #[derive(Debug)]
 pub enum AppMsg {
+    /// Emits when the text in the editor changes
     TextChanged(String),
-    CursorMoved(i32, i32, i32),
+    /// Emits when the cursor position changes
+    UpdateCursorPos(i32, i32, i32),
+
+    /// Opens file dialog
     Open,
-    SetContent(String),
+    /// Set the contents of the buffer, used in conjunction with `LoadBuffer`
+    SetBufferData(String),
+    /// Save current file to disk
+    /// If no file path is set, calls `SaveAs`
     Save,
+    /// Save current file to disk with a new name
+    /// Calls `SaveBuffer` with the new file path
     SaveAs,
-    SaveContent(String),
+    // SaveContent(String),
     Quit,
     Idk,
+    /// Displays about dialog
     About,
+
+    // Messages for i/o
+    /// Load file to buffer
+    LoadBuffer(PathBuf),
+    /// Save buffer to file
+    SaveBuffer(PathBuf, String),
+}
+
+impl AppModel {
+    fn default_file_name(&self) -> String {
+            const UNTITLED: &str = "Untitled.txt";
+            self.current_file
+                .as_ref()
+                .map(|f| f.file_name().and_then(|f| f.to_str()).unwrap_or(UNTITLED))
+                .unwrap_or_else(|| UNTITLED)
+                .to_string()
+        }
 }
 
 #[relm4::component]
@@ -40,6 +69,7 @@ impl SimpleComponent for AppModel {
             #[wrap(Some)]
             set_titlebar = &libhelium::AppBar {
                 set_is_compact: true,
+                // : adasd,
                 #[watch]
                 set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
             },
@@ -55,32 +85,29 @@ impl SimpleComponent for AppModel {
                 })) {
                 },
 
-                #[name = "source_view"]
-                sourceview5::View {
+                gtk::ScrolledWindow {
                     set_vexpand: true,
                     set_hexpand: true,
-                    set_wrap_mode: gtk::WrapMode::WordChar,
-                    set_show_line_numbers: true,
-                    set_highlight_current_line: true,
-                    set_monospace: true,
-                    set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+                    set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                    #[name = "source_view"]
+                    sourceview5::View {
+                        set_vexpand: true,
+                        set_hexpand: true,
+                        set_wrap_mode: gtk::WrapMode::WordChar,
+                        set_show_line_numbers: true,
+                        set_highlight_current_line: true,
+                        set_monospace: true,
+                        set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+                    },
                 },
-                libhelium::BottomBar {
-                    set_halign: gtk::Align::End,
-                    set_child = &gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
 
-                        #[name = "status_label"]
-                        gtk::Label {
-                            set_hexpand: true,
-                            set_xalign: 1.0,
-                            set_text: &format!("Line {}, Column {} | Characters: {}",
-                                model.line, model.column, model.char_count),
-                            set_margin_end: 10,
-                            set_margin_bottom: 5,
-                            set_margin_top: 5,
-                        }
-                    }
+                libhelium::BottomBar {
+                    set_css_classes: &["app-bar", "compact"],
+                    set_halign: gtk::Align::End,
+                    set_vexpand: false,
+                    set_can_focus: false,
+                    #[watch]
+                    set_title: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
                 }
 
             }
@@ -110,7 +137,7 @@ impl SimpleComponent for AppModel {
 
         {
             let sender_clone = sender.clone();
-            let status_label = widgets.status_label.clone();
+            // let status_label = widgets.status_label.clone();
             buffer.connect_changed(move |buffer| {
                 let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
                 let char_count = text.as_str().chars().count() as i32;
@@ -119,18 +146,18 @@ impl SimpleComponent for AppModel {
                 let line = cursor_iter.line() + 1;
                 let column = cursor_iter.line_offset() + 1;
 
-                sender_clone.input(AppMsg::CursorMoved(line, column, char_count));
+                sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
 
-                status_label.set_text(&format!(
-                    "Line {}, Column {} | Characters: {}",
-                    line, column, char_count
-                ));
+                // status_label.set_text(&format!(
+                //     "Line {}, Column {} | Characters: {}",
+                //     line, column, char_count
+                // ));
             });
         }
 
         {
             let sender_clone = sender.clone();
-            let status_label = widgets.status_label.clone();
+            // let status_label = widgets.status_label.clone();
             buffer.connect_mark_set(move |buffer, iter, mark| {
                 if mark.name().as_deref() == Some("insert") {
                     let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
@@ -139,12 +166,12 @@ impl SimpleComponent for AppModel {
                     let line = iter.line() + 1;
                     let column = iter.line_offset() + 1;
 
-                    sender_clone.input(AppMsg::CursorMoved(line, column, char_count));
+                    sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
 
-                    status_label.set_text(&format!(
-                        "Line {}, Column {} | Characters: {}",
-                        line, column, char_count
-                    ));
+                    // status_label.set_text(&format!(
+                    //     "Line {}, Column {} | Characters: {}",
+                    //     line, column, char_count
+                    // ));
                 }
             });
         }
@@ -198,75 +225,124 @@ impl SimpleComponent for AppModel {
 
         ComponentParts { model, widgets }
     }
+    
+
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             AppMsg::TextChanged(text) => {
                 self.text = text;
             }
-            AppMsg::CursorMoved(line, column, char_count) => {
+            AppMsg::UpdateCursorPos(line, column, char_count) => {
                 self.line = line;
                 self.column = column;
                 self.char_count = char_count;
             }
-            AppMsg::SetContent(content) => {
+            // Set content to buffer
+            AppMsg::SetBufferData(content) => {
                 self.text = content.clone();
                 self.buffer.set_text(&content);
             }
-
-            AppMsg::Open => {
-                // todo: switch to GTK file dialog
-                if let Some(file_path) = rfd::FileDialog::new()
-                    .add_filter("Text files", &["txt"])
-                    .add_filter("All files", &["*"])
-                    .set_title("Open File")
-                    .pick_file()
-                {
-                    if let Ok(content) = std::fs::read_to_string(&file_path) {
-                        self.current_file = Some(file_path.clone());
-                        sender.input(AppMsg::SetContent(content));
-                        println!("File opened successfully: {}", file_path.display());
-                    }
+            // Load file to buffer
+            AppMsg::LoadBuffer(file_path) => {
+                if let Ok(content) = std::fs::read(&file_path) {
+                    let content = String::from_utf8_lossy(&content).into_owned();
+                    self.current_file = Some(file_path.clone());
+                    sender.input(AppMsg::SetBufferData(content));
+                    println!("File opened successfully: {}", file_path.display());
                 }
             }
 
+            AppMsg::Open => {
+                let file_filter = gtk::FileFilter::new();
+                file_filter.add_mime_type("text/*");
+                file_filter.set_name(Some("Text files"));
+                file_filter.add_pattern("*.txt");
+
+
+                // todo: switch to GTK file dialog
+                let file_chooser = gtk::FileDialog::builder()
+                    // .filters(&[&file_filter])
+                    // .filter(&file_filter)
+                    // .action(gtk::FileChooserAction::Open)
+                    // .name("Open File")
+                    // .modal(true)
+                    .title("Open File")
+                    .build();
+                
+                // let sender = sender.clone();
+                file_chooser.open(None::<&gtk::Window>, None::<&gio::Cancellable>, move |res| {
+                    
+                    if let Ok(file) = res {
+                        if let Some(file_path) = file.path() {
+                            sender.input(AppMsg::LoadBuffer(file_path));
+                        }
+                    }
+                });
+
+            }
+
             AppMsg::Save => {
-                if let Some(_file_path) = &self.current_file {
+                if let Some(file_path) = &self.current_file {
                     let content = self
                         .buffer
                         .text(&self.buffer.start_iter(), &self.buffer.end_iter(), false)
                         .to_string();
-                    sender.input(AppMsg::SaveContent(content));
+                    sender.input(AppMsg::SaveBuffer(file_path.clone(), content));
                 } else {
                     sender.input(AppMsg::SaveAs);
                 }
             }
 
             AppMsg::SaveAs => {
-                if let Some(file_path) = rfd::FileDialog::new()
-                    .add_filter("Text files", &["txt"])
-                    .add_filter("All files", &["*"])
-                    .set_title("Save As")
-                    .save_file()
-                {
-                    self.current_file = Some(file_path);
-                    // Get text directly from the buffer
-                    let content = self
-                        .buffer
-                        .text(&self.buffer.start_iter(), &self.buffer.end_iter(), false)
-                        .to_string();
-                    sender.input(AppMsg::SaveContent(content));
-                }
+                let file_filter = gtk::FileFilter::new();
+                file_filter.add_mime_type("text/*");
+                file_filter.set_name(Some("Text files"));
+                file_filter.add_pattern("*.txt");
+
+                let file_chooser = gtk::FileDialog::builder()
+                    // .filters(&[&file_filter])
+                    // .filter(&file_filter)
+                    // .action(gtk::FileChooserAction::Save)
+                    // .name("Save File")
+                    // .modal(true)
+                    .title("Save File")
+                    .initial_name(&self.default_file_name())
+                    .build();
+
+                // let sender = sender.clone();
+                let model_buffer = self.buffer.clone();
+                file_chooser.save(None::<&gtk::Window>, None::<&gio::Cancellable>, move |res| {
+                    if let Ok(file) = res {
+                        if let Some(file_path) = file.path() {
+                            let content = model_buffer
+                                .text(&model_buffer.start_iter(), &model_buffer.end_iter(), false)
+                                .to_string();
+                            sender.input(AppMsg::SaveBuffer(file_path, content));
+                        }
+                    }
+                });
             }
-            AppMsg::SaveContent(content) => {
-                if let Some(file_path) = &self.current_file {
-                    match std::fs::write(file_path, &content) {
-                        Ok(_) => {
-                            println!("File saved successfully at: {}", file_path.display());
-                        }
-                        Err(e) => {
-                            println!("Error saving file: {}", e);
-                        }
+            // AppMsg::SaveContent(content) => {
+            //     if let Some(file_path) = &self.current_file {
+            //         match std::fs::write(file_path, &content) {
+            //             Ok(_) => {
+            //                 println!("File saved successfully at: {}", file_path.display());
+            //             }
+            //             Err(e) => {
+            //                 println!("Error saving file: {}", e);
+            //             }
+            //         }
+            //     }
+            // }
+            AppMsg::SaveBuffer(file_path, content) => {
+                println!("Saving buffer to file: {}", file_path.display());
+                match std::fs::write(&file_path, &content) {
+                    Ok(_) => {
+                        println!("File saved successfully at: {}", file_path.display());
+                    }
+                    Err(e) => {
+                        println!("Error saving file: {}", e);
                     }
                 }
             }
@@ -278,25 +354,26 @@ impl SimpleComponent for AppModel {
                 println!("IDK clicked");
             }
             AppMsg::About => {
-                let about = libhelium::AboutWindow::builder()
-                    .app_name("Enigmata")
-                    .app_id(APP_ID)
-                    .version(env!("CARGO_PKG_VERSION"))
-                    .developer_names(
-                        vec![
-                            "Eri Ishihara <eri@nijika.dev>",
+                relm4::view! {
+                    about = libhelium::AboutWindow {
+                        set_app_name: "Enigmata",
+                        set_app_id: APP_ID,
+                        set_version: env!("CARGO_PKG_VERSION"),
+                        set_developer_names: &[
+                            "Eri Ishihara <eri@nijika.dev",
                             "Cappy Ishihara <cappy@fyralabs.com>",
-                        ]
-                        .into_iter()
-                        .map(String::from)
-                        .collect::<Vec<_>>(),
-                    )
-                    // .comments("Yet Another GTK4 Text Editor")
-                    .copyright_year(2025)
-                    .name("Enigmata")
-                    .icon("accessories-text-editor")
-                    .modal(true)
-                    .build();
+                        ],
+                        set_copyright_year: 2025,
+                        set_modal: true,
+                        // #[wrap(Some)]
+                        set_issue_url: Some("https://github.com/tau-OS/enigmata/issues"),
+                        set_more_info_url: Some("https://github.com/tau-OS/enigmata"),
+                        set_icon: "accessories-text-editor",
+
+
+
+                    }
+                };
 
                 about.present();
             }
