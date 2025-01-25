@@ -1,5 +1,5 @@
-use relm4::gtk;
 use relm4::gtk::prelude::*;
+use relm4::{gtk, RelmWidgetExt};
 use sourceview5::prelude::*;
 #[derive(Debug, Default)]
 pub struct SearchBar {
@@ -15,6 +15,8 @@ pub struct SearchBar {
 
 #[derive(Debug, Clone)]
 pub enum SearchBarMsg {
+    Trigger,
+
     UpdateSearchQuery(String),
     SetSearchRegex(bool),
     SetSearchCaseSensitive(bool),
@@ -35,21 +37,60 @@ impl relm4::SimpleComponent for SearchBar {
 
     view! {
         gtk::Box {
-            set_halign: gtk::Align::Fill,
+            set_halign: gtk::Align::End,
             set_valign: gtk::Align::End,
             set_overflow: gtk::Overflow::Visible,
             #[local_ref] find_revealer ->
             gtk::Revealer {
-                set_transition_duration: 1000,
+                set_transition_duration: 300,
                 set_transition_type: gtk::RevealerTransitionType::SlideUp,
 
-                #[local_ref] search_entry ->
-                gtk::SearchEntry {
-                    connect_search_changed[sender] => move |search_entry| {
-                        let query = search_entry.text();
-                        sender.input(SearchBarMsg::UpdateSearchQuery(query.into()));
+
+                gtk::Grid {
+                    set_css_classes: &["search-bar", "opaque"],
+                    set_margin_all: 16,
+                    // set_row_homogeneous: true,
+                    set_orientation: gtk::Orientation::Vertical,
+
+                    // column, row, width, height
+
+                    #[local_ref]
+                    attach[0, 0, 1, 1] = search_entry -> gtk::SearchEntry {
+                        set_placeholder_text: Some("Search"),
+                        connect_search_changed[sender] => move |search_entry| {
+                            let query = search_entry.text();
+                            
+                            sender.input(SearchBarMsg::UpdateSearchQuery(query.into()));
+                        },
                     },
-                }
+                    
+                    
+                    
+                    attach[0, 1, 1, 1] = &gtk::CheckButton {
+                        set_label: Some("Regex"),
+                        connect_toggled[sender] => move |button| {
+                            let active = button.is_active();
+                            sender.input(SearchBarMsg::SetSearchRegex(active));
+                        },
+                    },
+                    
+                    attach[1, 1, 1, 1] = &gtk::CheckButton {
+                        set_label: Some("Case Sensitive"),
+                        connect_toggled[sender] => move |button| {
+                            let active = button.is_active();
+                            sender.input(SearchBarMsg::SetSearchCaseSensitive(active));
+                        },
+                    },
+                    
+                    attach[2, 1, 1, 1] = &gtk::CheckButton {
+                        set_label: Some("Whole Words"),
+                        connect_toggled[sender] => move |button| {
+                            let active = button.is_active();
+                            sender.input(SearchBarMsg::SetWordBoundarySearch(active));
+                        },
+                    },
+                },
+                // layout
             },
         },
     }
@@ -76,6 +117,11 @@ impl relm4::SimpleComponent for SearchBar {
 
     fn update(&mut self, msg: Self::Input, sender: relm4::ComponentSender<Self>) {
         match msg {
+            SearchBarMsg::Trigger => {
+                self.find_revealer
+                    .set_reveal_child(!self.find_revealer.is_child_revealed());
+                self.find_revealer.activate();
+            }
             SearchBarMsg::UpdateSearchQuery(query) => {
                 self.search_context
                     .settings()

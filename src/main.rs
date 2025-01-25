@@ -27,12 +27,7 @@ struct MainWindow {
     /// The actual text input buffer
     buffer: sourceview5::Buffer,
 
-    /// Search entry for searching and replacing text
-    search_entry: gtk::SearchEntry,
-    find_revealer: gtk::Revealer,
-
-    /// GTKSourceView search context
-    search_context: sourceview5::SearchContext,
+    search_bar: relm4::component::Connector<ui::search::SearchBar>,
 
     /// Indicates if the buffer has unsaved changes, AKA "dirty"
     is_dirty: bool,
@@ -148,119 +143,104 @@ impl SimpleComponent for MainWindow {
             },
 
             #[wrap(Some)]
-            #[name = "overlay"]
-            set_child = &gtk::Overlay {
-                set_hexpand: true,
-                set_vexpand: true,
-                // add_overlay = &libhelium::OverlayButton {
-                //     set_icon: "window-close-symbolic",
-                //     set_tooltip_text: Some("Close"),
-                //     connect_clicked[sender] => move |_| {
-                //         sender.input(AppMsg::Quit);
-                //     },
-                // },
-                // add_overlay = &gtk::Box {
-                //     set_halign: gtk::Align::End,
-                //     set_valign: gtk::Align::Start,
-                //     set_overflow: gtk::Overflow::Visible,
-                //     gtk::Button {
-                //         set_css_classes: &["app-bar-button", "circular"],
-                //         set_label: "Test",
-                //         set_icon_name: "window-close-symbolic",
-                //         connect_clicked[sender] => move |_| {
-                //             // request exit
-                //             sender.input(AppMsg::Quit);
-                //         },
-                //     },
-                // },
-                add_overlay: search_bar,
-
-                #[wrap(Some)]
-                #[name = "main_view"]
-                set_child = &gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-
-                    // gtk::Overlay {
-                    //     set_hexpand: true,
-                    //     set_vexpand: true,
+            set_child = &gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                #[name = "overlay"]
+                gtk::Overlay {
+                    set_hexpand: true,
+                    set_vexpand: true,
+                    // add_overlay = &libhelium::OverlayButton {
+                    //     set_icon: "window-close-symbolic",
+                    //     set_tooltip_text: Some("Close"),
+                    //     connect_clicked[sender] => move |_| {
+                    //         sender.input(AppMsg::Quit);
+                    //     },
+                    // },
+                    // add_overlay = &gtk::Box {
+                    //     set_halign: gtk::Align::End,
+                    //     set_valign: gtk::Align::Start,
                     //     set_overflow: gtk::Overflow::Visible,
-                    //     add_overlay = &gtk::Box {
-                    //         set_halign: gtk::Align::Center,
-                    //         set_valign: gtk::Align::Center,
-                    //         gtk::Label {
-                    //             set_halign: gtk::Align::Center,
-                    //             set_valign: gtk::Align::Center,
-                    //             set_label: "hello, world",
+                    //     gtk::Button {
+                    //         set_css_classes: &["app-bar-button", "circular"],
+                    //         set_label: "Test",
+                    //         set_icon_name: "window-close-symbolic",
+                    //         connect_clicked[sender] => move |_| {
+                    //             // request exit
+                    //             sender.input(AppMsg::Quit);
                     //         },
                     //     },
                     // },
+                    add_overlay: search_bar,
 
-                    gtk::ScrolledWindow {
-                        set_vexpand: true,
-                        set_hexpand: true,
-                        set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
-                        #[name = "source_view"]
-                        sourceview5::View {
-                            set_expand: true,
-                            set_input_purpose: gtk::InputPurpose::FreeForm,
-                            set_wrap_mode: gtk::WrapMode::WordChar,
-                            set_show_line_numbers: true,
-                            set_highlight_current_line: true,
-                            set_monospace: true,
-                            set_background_pattern: sourceview5::BackgroundPatternType::Grid,
-                            // set_extra_menu: Some(&{
-                            //     let menu: gtk4::gio::MenuModel = build_menu().into();
-                            //     menu
-                            // }),
+                    #[wrap(Some)]
+                    #[name = "main_view"]
+                    set_child = &gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+
+                        gtk::ScrolledWindow {
+                            set_vexpand: true,
+                            set_hexpand: true,
+                            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                            #[name = "source_view"]
+                            sourceview5::View {
+                                set_expand: true,
+                                set_input_purpose: gtk::InputPurpose::FreeForm,
+                                set_wrap_mode: gtk::WrapMode::WordChar,
+                                set_show_line_numbers: true,
+                                set_highlight_current_line: true,
+                                set_monospace: true,
+                                set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+                                // set_extra_menu: Some(&{
+                                //     let menu: gtk4::gio::MenuModel = build_menu().into();
+                                //     menu
+                                // }),
+                            },
+                        },
+                    }, // gtk::Overlay
+
+                }, // gtk::Box
+                #[name = "status_bar"]
+                // XXX: I don't think I'm supposed to use this BottomBar for this...
+                libhelium::BottomBar {
+                    set_css_classes: &["vim-status-bar"],
+                    // set_align: gtk::Align::BaselineFill,
+                    set_expand: false,
+                    // set_: asdasd,
+                    //
+                    set_menu_model: &gtk4::gio::MenuModel::from(build_menu()),
+                    #[watch]
+                    set_title: &format!("{}{}",
+                        model.current_file.clone().map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "Untitled".to_string()),
+                        if model.is_dirty { "*" } else { "" }
+                    ),
+                    #[watch]
+                    set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
+                    // set_title: "Test",
+                    // set_t
+
+
+                    #[name = "status_menu"]
+                    set_child = &gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 6,
+                        set_margin_all: 12,
+
+                        #[name = "open_button_shortcut"]
+                        prepend = &libhelium::Button {
+                            set_is_pill: true,
+                            set_is_tint: true,
+                            set_css_classes: &["app-bar-button", "rounded"],
+                            set_tooltip_text: Some("Open file..."),
+                            // set_label: "Open",
+                            set_icon_name: "document-open-symbolic",
+                            set_is_iconic: true,
+                            connect_clicked[sender] => move |_| {
+                                sender.input(AppMsg::Open);
+                            },
                         },
                     },
-
-                    #[name = "status_bar"]
-                    // XXX: I don't think I'm supposed to use this BottomBar for this...
-                    libhelium::BottomBar {
-                        set_css_classes: &["vim-status-bar"],
-                        // set_align: gtk::Align::BaselineFill,
-                        set_expand: false,
-                        // set_: asdasd,
-                        //
-                        set_menu_model: &gtk4::gio::MenuModel::from(build_menu()),
-                        #[watch]
-                        set_title: &format!("{}{}",
-                            model.current_file.clone().map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "Untitled".to_string()),
-                            if model.is_dirty { "*" } else { "" }
-                        ),
-                        #[watch]
-                        set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
-                        // set_title: "Test",
-                        // set_t
-
-
-                        #[name = "status_menu"]
-                        set_child = &gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 6,
-                            set_margin_all: 12,
-
-                            #[name = "open_button_shortcut"]
-                            prepend = &libhelium::Button {
-                                set_is_pill: true,
-                                set_is_tint: true,
-                                set_css_classes: &["app-bar-button", "rounded"],
-                                set_tooltip_text: Some("Open file..."),
-                                // set_label: "Open",
-                                set_icon_name: "document-open-symbolic",
-                                set_is_iconic: true,
-                                connect_clicked[sender] => move |_| {
-                                    sender.input(AppMsg::Open);
-                                },
-                            },
-
-                            // end status menu
-                        },
-                        // end bottombar
-                    }
-                }
+                }, // libhelium::BottomBar
             },
         }
     }
@@ -271,38 +251,32 @@ impl SimpleComponent for MainWindow {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         use sourceview5::prelude::BufferExt;
-        let style_scheme = sourceview5::StyleSchemeManager::default().scheme("classic-dark");
+        let style_scheme = sourceview5::StyleSchemeManager::default().scheme("Adwaita-dark");
         let buffer = sourceview5::Buffer::new(None);
         buffer.set_style_scheme(style_scheme.as_ref());
-        let mut search_bar = ui::search::SearchBar::builder().launch(buffer.clone());
-        search_bar.detach_runtime();
-        let search_bar = search_bar.widget();
 
-        let model = MainWindow {
+        let mut model = MainWindow {
             text,
             line: 1,
             column: 1,
             char_count: 0,
             current_file: None,
-            buffer: buffer.clone(), // Store the buffer in model
+            search_bar: ui::search::SearchBar::builder().launch(buffer.clone()),
+            buffer: buffer.clone(),
             is_dirty: false,
             file_hash: None,
-            search_entry: gtk::SearchEntry::new(),
-            search_context: sourceview5::SearchContext::builder()
-                .buffer(&buffer)
-                .build(),
-            find_revealer: gtk::Revealer::default(),
         };
 
-        let find_revealer = &model.find_revealer;
-        let search_entry = &model.search_entry;
+        model.search_bar.detach_runtime();
+
+        let search_bar = model.search_bar.widget();
+        let buffer = &model.buffer;
 
         let widgets = view_output!();
         widgets.source_view.set_buffer(Some(&model.buffer));
 
         {
             let sender_clone = sender.clone();
-            // let status_label = widgets.status_label.clone();
             buffer.connect_changed(move |buffer| {
                 let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
                 let char_count = text.as_str().chars().count() as i32;
@@ -312,18 +286,12 @@ impl SimpleComponent for MainWindow {
                 let column = cursor_iter.line_offset() + 1;
 
                 sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
-                // println!("Text changed: {}", text);
                 sender_clone.input(AppMsg::TextChanged(text.to_owned().into()));
-                // status_label.set_text(&format!(
-                //     "Line {}, Column {} | Characters: {}",
-                //     line, column, char_count
-                // ));
             });
         }
 
         {
             let sender_clone = sender.clone();
-            // let status_label = widgets.status_label.clone();
             buffer.connect_mark_set(move |buffer, iter, mark| {
                 if mark.name().as_deref() == Some("insert") {
                     let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
@@ -333,11 +301,6 @@ impl SimpleComponent for MainWindow {
                     let column = iter.line_offset() + 1;
 
                     sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
-
-                    // status_label.set_text(&format!(
-                    //     "Line {}, Column {} | Characters: {}",
-                    //     line, column, char_count
-                    // ));
                 }
             });
         }
@@ -397,10 +360,10 @@ impl SimpleComponent for MainWindow {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             AppMsg::Find => {
-                println!("Find clicked");
-                self.find_revealer
-                    .set_reveal_child(!self.find_revealer.is_child_revealed());
-                self.find_revealer.activate();
+                self.search_bar
+                    .sender()
+                    .send(ui::search::SearchBarMsg::Trigger)
+                    .unwrap();
             }
             AppMsg::TextChanged(text) => {
                 self.text = text;
