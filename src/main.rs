@@ -1,3 +1,5 @@
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::path::PathBuf;
 
 use gtk4::gio;
@@ -10,8 +12,17 @@ struct AppModel {
     line: i32,
     column: i32,
     char_count: i32,
+    /// The current file the buffer is associated with
     current_file: Option<std::path::PathBuf>,
+    
+    /// Hash of the current file, calculated on load
+    file_hash: Option<u64>,
+    
+    /// The actual text input buffer
     buffer: sourceview5::Buffer,
+    
+    /// Indicates if the buffer has unsaved changes, AKA "dirty"
+    is_dirty: bool,
 }
 
 #[derive(Debug)]
@@ -53,6 +64,16 @@ impl AppModel {
                 .unwrap_or_else(|| UNTITLED)
                 .to_string()
         }
+     
+    /// Hash the data in the current buffer
+    /// 
+    /// Used to determine if the buffer is dirty and requires saving   
+    fn hash_buffer_data(&self) -> u64 {
+        let mut hasher = std::hash::DefaultHasher::new();
+        let content = self.buffer.text(&self.buffer.start_iter(), &self.buffer.end_iter(), true);
+        content.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 #[relm4::component]
@@ -64,12 +85,18 @@ impl SimpleComponent for AppModel {
     view! {
         main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
+            
+            connect_close_request[sender] => move |_| {
+                sender.input(AppMsg::Quit);
+                gtk::glib::Propagation::Stop
+            },
 
             set_default_size: (1280, 720),
             #[wrap(Some)]
             set_titlebar = &libhelium::AppBar {
                 set_is_compact: true,
-                // : adasd,
+                set_show_right_title_buttons: true,
+                
                 #[watch]
                 set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
             },
@@ -91,8 +118,8 @@ impl SimpleComponent for AppModel {
                     set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
                     #[name = "source_view"]
                     sourceview5::View {
-                        set_vexpand: true,
-                        set_hexpand: true,
+                        set_expand: true,
+                        set_input_purpose: gtk::InputPurpose::FreeForm,
                         set_wrap_mode: gtk::WrapMode::WordChar,
                         set_show_line_numbers: true,
                         set_highlight_current_line: true,
@@ -128,6 +155,8 @@ impl SimpleComponent for AppModel {
             char_count: 0,
             current_file: None,
             buffer: buffer.clone(), // Store the buffer in model
+            is_dirty: false,
+            file_hash: None,
         };
 
         let widgets = view_output!();
@@ -147,7 +176,8 @@ impl SimpleComponent for AppModel {
                 let column = cursor_iter.line_offset() + 1;
 
                 sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
-
+                // println!("Text changed: {}", text);
+                sender_clone.input(AppMsg::TextChanged(text.to_owned().into()));
                 // status_label.set_text(&format!(
                 //     "Line {}, Column {} | Characters: {}",
                 //     line, column, char_count
@@ -167,6 +197,7 @@ impl SimpleComponent for AppModel {
                     let column = iter.line_offset() + 1;
 
                     sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
+
 
                     // status_label.set_text(&format!(
                     //     "Line {}, Column {} | Characters: {}",
@@ -232,6 +263,21 @@ impl SimpleComponent for AppModel {
         match msg {
             AppMsg::TextChanged(text) => {
                 self.text = text;
+                // Mark buffer as dirty if we hashed the current buffer
+                // in memory, and the hash doesn't match the currently
+                // stored one
+                if let Some(stored_hash) = self.file_hash {
+                    // println!("Calculating hash...");
+                    // println!("Stored hash: {}", stored_hash);
+                    // println!("Current hash: {}", self.hash_buffer_data());
+                    
+                    
+                    // todo: 
+                    let current_hash = self.hash_buffer_data();
+                    self.is_dirty = stored_hash != current_hash;
+                } else {
+                    self.is_dirty = true;
+                }
             }
             AppMsg::UpdateCursorPos(line, column, char_count) => {
                 self.line = line;
@@ -241,7 +287,10 @@ impl SimpleComponent for AppModel {
             // Set content to buffer
             AppMsg::SetBufferData(content) => {
                 self.text = content.clone();
+                // hash the buffer
                 self.buffer.set_text(&content);
+                // hash the buffer
+                self.file_hash = Some(self.hash_buffer_data());
             }
             // Load file to buffer
             AppMsg::LoadBuffer(file_path) => {
@@ -250,6 +299,8 @@ impl SimpleComponent for AppModel {
                     self.current_file = Some(file_path.clone());
                     sender.input(AppMsg::SetBufferData(content));
                     println!("File opened successfully: {}", file_path.display());
+                    // Mark buffer as clean until changes are made
+                    self.is_dirty = false;
                 }
             }
 
@@ -348,7 +399,32 @@ impl SimpleComponent for AppModel {
             }
             AppMsg::Quit => {
                 println!("Quitting...");
-                std::process::exit(0);
+                
+                println!("Dirty buffer: {:?}", self.is_dirty);
+                
+                if self.is_dirty {
+                    let alert = gtk::AlertDialog::builder()
+                        // .title("Unsaved changes")
+                        .message("Unsaved changes")
+                        .detail("You have unsaved changes. Do you want to save before quitting?")
+                        // .buttons(&[
+                        //     ("Save", gtk::ResponseType::Yes),
+                        //     ("Don't Save", gtk::ResponseType::No),
+                        //     ("Cancel", gtk::ResponseType::Cancel),
+                        // ])
+                        // .buttons(gtk::ButtonsType::YesNoCancel)
+                        .cancel_button(3)
+                        
+                        .modal(true)
+                        .build();
+                    alert.show(None::<&gtk::Window>);
+                    
+                } else {
+                    std::process::exit(0);
+                }
+                
+                
+                // std::process::exit(0);
             }
             AppMsg::Idk => {
                 println!("IDK clicked");
@@ -408,7 +484,7 @@ use gtk4::glib::translate::FromGlibPtrNone;
 fn main() {
     let happ = libhelium::Application::builder()
         .application_id(APP_ID)
-        .flags(libhelium::gtk::gio::ApplicationFlags::default())
+        .flags(libhelium::gtk::gio::ApplicationFlags::HANDLES_OPEN)
         .default_accent_color(unsafe {
             &libhelium::RGBColor::from_glib_none(std::ptr::from_mut(
                 &mut libhelium::ffi::HeRGBColor {
@@ -419,7 +495,18 @@ fn main() {
             ))
         })
         .build();
+    
+    happ.connect_open(move |app, files, _| {
+        // let sender = app.sen
+        for file in files {
+            if let Some(file) = file.path() {
+                println!("Opening file: {}", file.display());
+                
+            }
+        }
+    });
 
     let app = RelmApp::from_app(happ);
+    app.allow_multiple_instances(true);
     app.run::<AppModel>("".to_string());
 }
