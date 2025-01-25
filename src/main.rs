@@ -7,6 +7,8 @@ use gtk4::prelude::*;
 use libhelium::prelude::*;
 use relm4::prelude::*;
 use sourceview5::prelude::ViewExt;
+// use sourceview5::prelude::BufferExt;
+use sourceview5::prelude::*;
 struct AppModel {
     text: String,
     line: i32,
@@ -14,13 +16,13 @@ struct AppModel {
     char_count: i32,
     /// The current file the buffer is associated with
     current_file: Option<std::path::PathBuf>,
-    
+
     /// Hash of the current file, calculated on load
     file_hash: Option<u64>,
-    
+
     /// The actual text input buffer
     buffer: sourceview5::Buffer,
-    
+
     /// Indicates if the buffer has unsaved changes, AKA "dirty"
     is_dirty: bool,
 }
@@ -53,24 +55,29 @@ pub enum AppMsg {
     LoadBuffer(PathBuf),
     /// Save buffer to file
     SaveBuffer(PathBuf, String),
+    
+    SetStyleScheme(sourceview5::StyleScheme),
+    SelectStyleScheme,
 }
 
 impl AppModel {
     fn default_file_name(&self) -> String {
-            const UNTITLED: &str = "Untitled.txt";
-            self.current_file
-                .as_ref()
-                .map(|f| f.file_name().and_then(|f| f.to_str()).unwrap_or(UNTITLED))
-                .unwrap_or_else(|| UNTITLED)
-                .to_string()
-        }
-     
+        const UNTITLED: &str = "Untitled.txt";
+        self.current_file
+            .as_ref()
+            .map(|f| f.file_name().and_then(|f| f.to_str()).unwrap_or(UNTITLED))
+            .unwrap_or_else(|| UNTITLED)
+            .to_string()
+    }
+
     /// Hash the data in the current buffer
-    /// 
-    /// Used to determine if the buffer is dirty and requires saving   
+    ///
+    /// Used to determine if the buffer is dirty and requires saving
     fn hash_buffer_data(&self) -> u64 {
         let mut hasher = std::hash::DefaultHasher::new();
-        let content = self.buffer.text(&self.buffer.start_iter(), &self.buffer.end_iter(), true);
+        let content = self
+            .buffer
+            .text(&self.buffer.start_iter(), &self.buffer.end_iter(), true);
         content.hash(&mut hasher);
         hasher.finish()
     }
@@ -85,7 +92,7 @@ impl SimpleComponent for AppModel {
     view! {
         main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
-            
+
             connect_close_request[sender] => move |_| {
                 sender.input(AppMsg::Quit);
                 gtk::glib::Propagation::Stop
@@ -95,22 +102,41 @@ impl SimpleComponent for AppModel {
             #[wrap(Some)]
             set_titlebar = &libhelium::AppBar {
                 set_is_compact: true,
+                set_show_left_title_buttons: true,
                 set_show_right_title_buttons: true,
                 
-                #[watch]
-                set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+                
+                #[wrap(Some)]
+                #[name = "viewtitle_widget"]
+                set_viewtitle_widget = &gtk::Box {
+                    // set_orientation: gtk::Orientation::Horizontal,
+                    // set_expand: true,
+                    // #[name = "viewtitle_label"]
+                    // gtk::Label {
+                    //     set_text: "Enigmata",
+                    //     set_halign: gtk::Align::Center,
+                    //     set_margin_start: 12,
+                    //     // set_: true,
+                    // },
+                },
+
+                // #[watch]
+                // set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
             },
 
             #[wrap(Some)]
+            #[name = "main_view"]
             set_child = &gtk::Box  {
                 set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 0,
+                // set_spacing: 0,
 
-                gtk::PopoverMenuBar::from_model(Some(&{
-                    let menu: gtk4::gio::MenuModel = build_menu().into();
-                    menu
-                })) {
-                },
+                // gtk::PopoverMenuBar::from_model(Some(&{
+                //     let menu: gtk4::gio::MenuModel = build_menu().into();
+                //     menu
+                // })) {
+                //     set_expand: false,
+                //     set_: 10,
+                // },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
@@ -125,18 +151,52 @@ impl SimpleComponent for AppModel {
                         set_highlight_current_line: true,
                         set_monospace: true,
                         set_background_pattern: sourceview5::BackgroundPatternType::Grid,
+                        // set_sty: Some(&sourceview5::StyleScheme::new_from_builtin(sourceview5::StyleSchemeName::Classic)),
                     },
                 },
-
+                // #[name = "status_bar_test"]
+                // libhelium::T
+                
+                #[name = "status_bar"]
+                // XXX: I don't think I'm supposed to use this BottomBar for this...
                 libhelium::BottomBar {
-                    set_css_classes: &["app-bar", "compact"],
-                    set_halign: gtk::Align::End,
-                    set_vexpand: false,
-                    set_can_focus: false,
+                    set_css_classes: &["vim-status-bar"],
+                    // set_align: gtk::Align::BaselineFill,
+                    set_expand: false,
+                    // set_: asdasd,
+                    // 
+                    set_menu_model: &{
+                        let menu: gtk4::gio::MenuModel = build_menu().into();
+                        menu
+                    },
                     #[watch]
-                    set_title: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
-                }
+                    set_title: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+                    #[watch]
+                    set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
+                    // set_title: "Test",
+                    // set_t
+                    
+                    
+                    #[name = "status_menu"]
+                    set_child = &gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_spacing: 6,
+                        set_margin_all: 12,
 
+                        #[name = "open_button_shortcut"]
+                        libhelium::Button {
+                            set_is_pill: true,
+                            set_is_tint: true,
+                            set_css_classes: &["app-bar-button", "rounded"],
+                            set_tooltip_text: Some("Open file..."),
+                            // set_label: "Open",
+                            set_icon_name: "document-open-symbolic",
+                            connect_clicked[sender] => move |_| {
+                                sender.input(AppMsg::Open);
+                            },
+                        }
+                    },
+                }
             }
         }
     }
@@ -146,7 +206,12 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        use sourceview5::prelude::BufferExt;
+        let style_scheme = sourceview5::StyleScheme::builder()
+            .id("classic")
+            .build();
         let buffer = sourceview5::Buffer::new(None);
+        buffer.set_style_scheme(Some(&style_scheme));
 
         let model = AppModel {
             text,
@@ -198,7 +263,6 @@ impl SimpleComponent for AppModel {
 
                     sender_clone.input(AppMsg::UpdateCursorPos(line, column, char_count));
 
-
                     // status_label.set_text(&format!(
                     //     "Line {}, Column {} | Characters: {}",
                     //     line, column, char_count
@@ -249,6 +313,13 @@ impl SimpleComponent for AppModel {
             sender_about.input(AppMsg::About);
         });
         actions.add_action(&action_about);
+        
+        let sender_selectstylescheme = sender.clone();
+        let action_selectstylescheme = gtk4::gio::SimpleAction::new("selectstylescheme", None);
+        action_selectstylescheme.connect_activate(move |_, _| {
+            sender_selectstylescheme.input(AppMsg::SelectStyleScheme);
+        });
+        actions.add_action(&action_selectstylescheme);
 
         widgets
             .main_window
@@ -256,8 +327,6 @@ impl SimpleComponent for AppModel {
 
         ComponentParts { model, widgets }
     }
-    
-
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
@@ -270,9 +339,8 @@ impl SimpleComponent for AppModel {
                     // println!("Calculating hash...");
                     // println!("Stored hash: {}", stored_hash);
                     // println!("Current hash: {}", self.hash_buffer_data());
-                    
-                    
-                    // todo: 
+
+                    // todo:
                     let current_hash = self.hash_buffer_data();
                     self.is_dirty = stored_hash != current_hash;
                 } else {
@@ -310,7 +378,6 @@ impl SimpleComponent for AppModel {
                 file_filter.set_name(Some("Text files"));
                 file_filter.add_pattern("*.txt");
 
-
                 // todo: switch to GTK file dialog
                 let file_chooser = gtk::FileDialog::builder()
                     // .filters(&[&file_filter])
@@ -320,17 +387,19 @@ impl SimpleComponent for AppModel {
                     // .modal(true)
                     .title("Open File")
                     .build();
-                
-                // let sender = sender.clone();
-                file_chooser.open(None::<&gtk::Window>, None::<&gio::Cancellable>, move |res| {
-                    
-                    if let Ok(file) = res {
-                        if let Some(file_path) = file.path() {
-                            sender.input(AppMsg::LoadBuffer(file_path));
-                        }
-                    }
-                });
 
+                // let sender = sender.clone();
+                file_chooser.open(
+                    None::<&gtk::Window>,
+                    None::<&gio::Cancellable>,
+                    move |res| {
+                        if let Ok(file) = res {
+                            if let Some(file_path) = file.path() {
+                                sender.input(AppMsg::LoadBuffer(file_path));
+                            }
+                        }
+                    },
+                );
             }
 
             AppMsg::Save => {
@@ -363,16 +432,24 @@ impl SimpleComponent for AppModel {
 
                 // let sender = sender.clone();
                 let model_buffer = self.buffer.clone();
-                file_chooser.save(None::<&gtk::Window>, None::<&gio::Cancellable>, move |res| {
-                    if let Ok(file) = res {
-                        if let Some(file_path) = file.path() {
-                            let content = model_buffer
-                                .text(&model_buffer.start_iter(), &model_buffer.end_iter(), false)
-                                .to_string();
-                            sender.input(AppMsg::SaveBuffer(file_path, content));
+                file_chooser.save(
+                    None::<&gtk::Window>,
+                    None::<&gio::Cancellable>,
+                    move |res| {
+                        if let Ok(file) = res {
+                            if let Some(file_path) = file.path() {
+                                let content = model_buffer
+                                    .text(
+                                        &model_buffer.start_iter(),
+                                        &model_buffer.end_iter(),
+                                        false,
+                                    )
+                                    .to_string();
+                                sender.input(AppMsg::SaveBuffer(file_path, content));
+                            }
                         }
-                    }
-                });
+                    },
+                );
             }
             // AppMsg::SaveContent(content) => {
             //     if let Some(file_path) = &self.current_file {
@@ -399,9 +476,9 @@ impl SimpleComponent for AppModel {
             }
             AppMsg::Quit => {
                 println!("Quitting...");
-                
+
                 println!("Dirty buffer: {:?}", self.is_dirty);
-                
+
                 if self.is_dirty {
                     let alert = gtk::AlertDialog::builder()
                         // .title("Unsaved changes")
@@ -414,20 +491,61 @@ impl SimpleComponent for AppModel {
                         // ])
                         // .buttons(gtk::ButtonsType::YesNoCancel)
                         .cancel_button(3)
-                        
                         .modal(true)
                         .build();
                     alert.show(None::<&gtk::Window>);
-                    
                 } else {
                     std::process::exit(0);
                 }
-                
-                
+
                 // std::process::exit(0);
             }
             AppMsg::Idk => {
                 println!("IDK clicked");
+            }
+            
+            AppMsg::SetStyleScheme(scheme) => {
+                self.buffer.set_style_scheme(Some(&scheme));
+            }
+            AppMsg::SelectStyleScheme => {
+                let style_scheme = sourceview5::StyleSchemeChooserWidget::builder()
+                    
+                    .build();
+                
+                relm4::view! {
+                    // style_scheme = sourceview5::StyleSchemeChooserButton {
+                    // },
+                    window = gtk::Window {
+                        // set_title: "Select Style Scheme",
+                        set_default_size: (400, 400),
+                        // #[wrap(Some)]
+                        // sourceview5::StyleSchemeChooserButton {
+                        //     connect_style_scheme_notify[sender] => move |button| {
+                        //         let scheme = button.style_scheme();
+                        //         sender.input(AppMsg::SetStyleScheme(scheme));
+                        //     }
+                        // },
+                        // 
+                        gtk::ScrolledWindow {
+                            set_vexpand: true,
+                            set_hexpand: true,
+                            set_policy: (gtk::PolicyType::Automatic, gtk::PolicyType::Automatic),
+                            sourceview5::StyleSchemeChooserWidget {
+                                // set_style_scheme: self.buffer.style_scheme().unwrap(),
+                                connect_style_scheme_notify[sender] => move |button| {
+                                    let scheme = button.style_scheme();
+                                    sender.input(AppMsg::SetStyleScheme(scheme));
+                                }
+                            },
+                        },
+
+                    },
+                    
+                    // style_chooser = 
+                }
+                
+                window.present();
+                // sender.input(AppMsg::SetStyleScheme(style_scheme));
             }
             AppMsg::About => {
                 relm4::view! {
@@ -446,8 +564,6 @@ impl SimpleComponent for AppModel {
                         set_more_info_url: Some("https://github.com/tau-OS/enigmata"),
                         set_icon: "accessories-text-editor",
 
-
-
                     }
                 };
 
@@ -463,12 +579,13 @@ fn build_menu() -> gio::Menu {
     let file_menu = gio::Menu::new();
     let help_menu = gio::Menu::new();
 
-    enigmata_menu.append_item(&gio::MenuItem::new(Some("Open"), Some("app.open")));
-    enigmata_menu.append_item(&gio::MenuItem::new(Some("Save"), Some("app.save")));
-    enigmata_menu.append_item(&gio::MenuItem::new(Some("Save As"), Some("app.saveas")));
+    file_menu.append_item(&gio::MenuItem::new(Some("Open"), Some("app.open")));
+    file_menu.append_item(&gio::MenuItem::new(Some("Save"), Some("app.save")));
+    file_menu.append_item(&gio::MenuItem::new(Some("Save As"), Some("app.saveas")));
     enigmata_menu.append_item(&gio::MenuItem::new(Some("Exit"), Some("app.exit")));
+    enigmata_menu.append_item(&gio::MenuItem::new(Some("Set Style Scheme"), Some("app.selectstylescheme")));
 
-    file_menu.append_item(&gio::MenuItem::new(Some("Nothing yet..."), Some("app.idk")));
+    // file_menu.append_item(&gio::MenuItem::new(Some("Nothing yet..."), Some("app.idk")));
 
     help_menu.append_item(&gio::MenuItem::new(Some("About"), Some("app.about")));
 
@@ -479,8 +596,9 @@ fn build_menu() -> gio::Menu {
     menu
 }
 
-const APP_ID: &str = "com.fyralabs.enigmata";
+const APP_ID: &str = "com.fyralabs.Enigmata";
 use gtk4::glib::translate::FromGlibPtrNone;
+
 fn main() {
     let happ = libhelium::Application::builder()
         .application_id(APP_ID)
@@ -495,13 +613,12 @@ fn main() {
             ))
         })
         .build();
-    
-    happ.connect_open(move |app, files, _| {
+
+    happ.connect_open(move |_app, files, _| {
         // let sender = app.sen
         for file in files {
             if let Some(file) = file.path() {
                 println!("Opening file: {}", file.display());
-                
             }
         }
     });
