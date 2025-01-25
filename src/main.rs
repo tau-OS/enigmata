@@ -2,6 +2,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::PathBuf;
 
+use glib::language_names;
 use gtk4::gio;
 use gtk4::prelude::*;
 use libhelium::prelude::*;
@@ -58,6 +59,9 @@ pub enum AppMsg {
     
     SetStyleScheme(sourceview5::StyleScheme),
     SelectStyleScheme,
+    
+    /// Set text highlighting language
+    SetLanguage(Option<sourceview5::Language>),
 }
 
 impl AppModel {
@@ -68,6 +72,16 @@ impl AppModel {
             .map(|f| f.file_name().and_then(|f| f.to_str()).unwrap_or(UNTITLED))
             .unwrap_or_else(|| UNTITLED)
             .to_string()
+    }
+    
+    fn guess_language_from_file(&self) -> Option<sourceview5::Language> {
+        let langman = sourceview5::LanguageManager::default();
+        
+        let file_path = self.current_file.as_ref();
+        
+        let l = langman.guess_language(file_path, None);
+        println!("Guessing language: {:?}", l);
+        l
     }
 
     /// Hash the data in the current buffer
@@ -170,7 +184,11 @@ impl SimpleComponent for AppModel {
                         menu
                     },
                     #[watch]
-                    set_title: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+                    set_title: &format!("{}{}",
+                        model.current_file.clone().map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "Untitled".to_string()),
+                        if model.is_dirty { "*" } else { "" }
+                    ),
                     #[watch]
                     set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
                     // set_title: "Test",
@@ -207,11 +225,11 @@ impl SimpleComponent for AppModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         use sourceview5::prelude::BufferExt;
-        let style_scheme = sourceview5::StyleScheme::builder()
-            .id("classic")
-            .build();
+        let style_scheme = sourceview5::StyleSchemeManager::default()
+            .scheme("classic-dark");
         let buffer = sourceview5::Buffer::new(None);
-        buffer.set_style_scheme(Some(&style_scheme));
+        buffer.set_style_scheme(style_scheme.as_ref());
+        // language.guess_language(filename, content_type)
 
         let model = AppModel {
             text,
@@ -369,6 +387,9 @@ impl SimpleComponent for AppModel {
                     println!("File opened successfully: {}", file_path.display());
                     // Mark buffer as clean until changes are made
                     self.is_dirty = false;
+                    // Set text highlighting
+                    let lang = self.guess_language_from_file();
+                    sender.input(AppMsg::SetLanguage(lang));
                 }
             }
 
@@ -463,6 +484,9 @@ impl SimpleComponent for AppModel {
             //         }
             //     }
             // }
+            AppMsg::SetLanguage(lang) => {
+                self.buffer.set_language(lang.as_ref());
+            }
             AppMsg::SaveBuffer(file_path, content) => {
                 println!("Saving buffer to file: {}", file_path.display());
                 match std::fs::write(&file_path, &content) {
@@ -505,6 +529,7 @@ impl SimpleComponent for AppModel {
             }
             
             AppMsg::SetStyleScheme(scheme) => {
+                println!("Setting style scheme: {:?}", scheme.id());
                 self.buffer.set_style_scheme(Some(&scheme));
             }
             AppMsg::SelectStyleScheme => {
