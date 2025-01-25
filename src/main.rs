@@ -11,8 +11,9 @@ use sourceview5::prelude::ViewExt;
 // use sourceview5::prelude::BufferExt;
 use sourceview5::prelude::*;
 mod shortcuts;
+mod ui;
 
-struct AppModel {
+struct MainWindow {
     text: String,
     line: i32,
     column: i32,
@@ -28,6 +29,7 @@ struct AppModel {
 
     /// Search entry for searching and replacing text
     search_entry: gtk::SearchEntry,
+    find_revealer: gtk::Revealer,
 
     /// GTKSourceView search context
     search_context: sourceview5::SearchContext,
@@ -75,7 +77,7 @@ pub enum AppMsg {
     SetLanguage(Option<sourceview5::Language>),
 }
 
-impl AppModel {
+impl MainWindow {
     fn default_file_name(&self) -> String {
         const UNTITLED: &str = "Untitled.txt";
         self.current_file
@@ -109,7 +111,7 @@ impl AppModel {
 }
 
 #[relm4::component]
-impl SimpleComponent for AppModel {
+impl SimpleComponent for MainWindow {
     type Init = String;
     type Input = AppMsg;
     type Output = ();
@@ -119,7 +121,8 @@ impl SimpleComponent for AppModel {
         main_window = libhelium::ApplicationWindow {
             set_title: Some("Enigmata"),
             set_icon_name: Some("accessories-text-editor"),
-            set_show_menubar: true,
+            set_show_menubar: false,
+            set_vexpand: false,
             set_decorated: true,
 
             connect_close_request[sender] => move |_| {
@@ -130,73 +133,53 @@ impl SimpleComponent for AppModel {
             set_default_size: (1280, 720),
             #[wrap(Some)]
             set_titlebar = &libhelium::AppBar {
-                set_is_compact: true,
+                set_is_compact: false,
                 set_show_left_title_buttons: true,
                 set_show_right_title_buttons: true,
-                set_halign: gtk::Align::BaselineFill,
-                set_expand: false,
-                // append_menu: &{
-                //     let menu: gtk4::gio::MenuModel = build_menu().into();
-                //     menu
-                // },
-
-                // #[wrap(Some)]
-                // #[name = "viewtitle_widget"]
-                // append_menu = &gtk::MenuButton {}
-
-                // append_menu = &gtk::Box {
-                //     set_orientation: gtk::Orientation::Horizontal,
-                //     set_halign: gtk::Align::End,
-                //     set_expand: true,
-                //     gtk::MenuButton {
-                //         // set_halign: gtk::Align::End,
-                //         // set_label: "File",
-
-                //         // todo: Separate menus for this part, we don't want to reuse the same menus
-                //         // Maybe the bottom bar menu can be for file ops, and the title bar can be for other stuff
-                //         set_icon_name: "open-menu-symbolic",
-                //         // set_is_iconic: true,
-                //         // set_css_classes: &["titlebar-menu", "iconic"],
-                //         set_menu_model: Some(&{
-                //             let menu: gtk4::gio::MenuModel = build_menu().into();
-                //             menu
-                //         }),
-                //     },
-                // },
-
-                // #[watch]
-                // set_viewsubtitle_label: model.current_file.clone().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".to_string()).as_ref(),
+                set_align: gtk::Align::Fill,
+                set_vexpand: false,
+                set_css_classes: &["app-bar"],
+                set_overflow: gtk::Overflow::Visible,
+                set_child = &gtk::Box {
+                    gtk::Label {
+                        set_label: "hiii!!!!",
+                    }
+                }
             },
-            // #[wrap(Some)]
-            // set_child = &libhelium::OverlayButton {
 
-            //     #[wrap(Some)]
-            //     set_focus_child = &gtk::Box {},
-            //     // add_child: (&gtk::Builder::default(), &gtk::Box::default(),None)
-            // },
-            //
-            // #[wrap(Some)]
-            // #[name = "overlay"]
             #[wrap(Some)]
+            #[name = "overlay"]
             set_child = &gtk::Overlay {
                 set_hexpand: true,
                 set_vexpand: true,
-                
-                add_overlay = &gtk::Box {
-                    set_halign: gtk::Align::Center,
-                    set_valign: gtk::Align::Center,
-                    set_overflow: gtk::Overflow::Visible,
-                    gtk::Label {
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_label: "hello, world",
-                    },
-                },
+                // add_overlay = &libhelium::OverlayButton {
+                //     set_icon: "window-close-symbolic",
+                //     set_tooltip_text: Some("Close"),
+                //     connect_clicked[sender] => move |_| {
+                //         sender.input(AppMsg::Quit);
+                //     },
+                // },
+                // add_overlay = &gtk::Box {
+                //     set_halign: gtk::Align::End,
+                //     set_valign: gtk::Align::Start,
+                //     set_overflow: gtk::Overflow::Visible,
+                //     gtk::Button {
+                //         set_css_classes: &["app-bar-button", "circular"],
+                //         set_label: "Test",
+                //         set_icon_name: "window-close-symbolic",
+                //         connect_clicked[sender] => move |_| {
+                //             // request exit
+                //             sender.input(AppMsg::Quit);
+                //         },
+                //     },
+                // },
+                add_overlay: search_bar,
+
                 #[wrap(Some)]
                 #[name = "main_view"]
                 set_child = &gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
-    
+
                     // gtk::Overlay {
                     //     set_hexpand: true,
                     //     set_vexpand: true,
@@ -211,7 +194,7 @@ impl SimpleComponent for AppModel {
                     //         },
                     //     },
                     // },
-    
+
                     gtk::ScrolledWindow {
                         set_vexpand: true,
                         set_hexpand: true,
@@ -231,7 +214,7 @@ impl SimpleComponent for AppModel {
                             // }),
                         },
                     },
-    
+
                     #[name = "status_bar"]
                     // XXX: I don't think I'm supposed to use this BottomBar for this...
                     libhelium::BottomBar {
@@ -251,14 +234,14 @@ impl SimpleComponent for AppModel {
                         set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
                         // set_title: "Test",
                         // set_t
-    
-    
+
+
                         #[name = "status_menu"]
                         set_child = &gtk::Box {
                             set_orientation: gtk::Orientation::Horizontal,
                             set_spacing: 6,
                             set_margin_all: 12,
-    
+
                             #[name = "open_button_shortcut"]
                             prepend = &libhelium::Button {
                                 set_is_pill: true,
@@ -272,14 +255,12 @@ impl SimpleComponent for AppModel {
                                     sender.input(AppMsg::Open);
                                 },
                             },
-    
+
                             // end status menu
                         },
                         // end bottombar
                     }
                 }
-              
-              
             },
         }
     }
@@ -293,13 +274,11 @@ impl SimpleComponent for AppModel {
         let style_scheme = sourceview5::StyleSchemeManager::default().scheme("classic-dark");
         let buffer = sourceview5::Buffer::new(None);
         buffer.set_style_scheme(style_scheme.as_ref());
+        let mut search_bar = ui::search::SearchBar::builder().launch(buffer.clone());
+        search_bar.detach_runtime();
+        let search_bar = search_bar.widget();
 
-        let search_entry = gtk::SearchEntry::new();
-        let search_context = sourceview5::SearchContext::builder()
-            .buffer(&buffer)
-            .build();
-
-        let model = AppModel {
+        let model = MainWindow {
             text,
             line: 1,
             column: 1,
@@ -308,9 +287,15 @@ impl SimpleComponent for AppModel {
             buffer: buffer.clone(), // Store the buffer in model
             is_dirty: false,
             file_hash: None,
-            search_entry: search_entry.clone(),
-            search_context: search_context.clone(),
+            search_entry: gtk::SearchEntry::new(),
+            search_context: sourceview5::SearchContext::builder()
+                .buffer(&buffer)
+                .build(),
+            find_revealer: gtk::Revealer::default(),
         };
+
+        let find_revealer = &model.find_revealer;
+        let search_entry = &model.search_entry;
 
         let widgets = view_output!();
         widgets.source_view.set_buffer(Some(&model.buffer));
@@ -412,7 +397,10 @@ impl SimpleComponent for AppModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             AppMsg::Find => {
-                // self.search_context.
+                println!("Find clicked");
+                self.find_revealer
+                    .set_reveal_child(!self.find_revealer.is_child_revealed());
+                self.find_revealer.activate();
             }
             AppMsg::TextChanged(text) => {
                 self.text = text;
@@ -739,5 +727,5 @@ fn main() {
 
     let app = RelmApp::from_app(happ);
     app.allow_multiple_instances(true);
-    app.run::<AppModel>("".to_string());
+    app.run::<MainWindow>("".to_string());
 }
