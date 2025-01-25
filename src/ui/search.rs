@@ -42,12 +42,15 @@ impl relm4::SimpleComponent for SearchBar {
             set_overflow: gtk::Overflow::Visible,
             #[local_ref] find_revealer ->
             gtk::Revealer {
+                set_overflow: gtk::Overflow::Visible,
+                // set_
                 set_transition_duration: 300,
                 set_transition_type: gtk::RevealerTransitionType::SlideUp,
 
 
                 gtk::Grid {
-                    set_css_classes: &["search-bar", "opaque"],
+                    // set_css_classes: &["badge-info", "content-block"],
+                    inline_css: "background-color: @surface_bright_bg_color; border-radius: 8px; padding: 8px; drop-shadow: 0 0 8px rgba(0, 0, 0, 0.5);",
                     set_margin_all: 16,
                     // set_row_homogeneous: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -126,6 +129,10 @@ impl relm4::SimpleComponent for SearchBar {
                 self.search_context
                     .settings()
                     .set_search_text((!query.is_empty()).then_some(&query));
+                
+                let txt = self.search_context.settings().search_text();
+                
+                println!("Search query: {:?}", txt);
             }
             SearchBarMsg::SetSearchRegex(opt) => {
                 // Set the search to use regex

@@ -128,12 +128,10 @@ impl SimpleComponent for MainWindow {
             set_default_size: (1280, 720),
             #[wrap(Some)]
             set_titlebar = &libhelium::AppBar {
-                set_is_compact: false,
-                set_show_left_title_buttons: true,
-                set_show_right_title_buttons: true,
-                set_align: gtk::Align::Fill,
+                set_is_compact: true,
+                // set_align: gtk::Align::Fill,
                 set_vexpand: false,
-                set_css_classes: &["app-bar"],
+                set_css_classes: &["app-bar", "vim-status-bar"],
                 set_overflow: gtk::Overflow::Visible,
                 set_child = &gtk::Box {
                     gtk::Label {
@@ -149,27 +147,6 @@ impl SimpleComponent for MainWindow {
                 gtk::Overlay {
                     set_hexpand: true,
                     set_vexpand: true,
-                    // add_overlay = &libhelium::OverlayButton {
-                    //     set_icon: "window-close-symbolic",
-                    //     set_tooltip_text: Some("Close"),
-                    //     connect_clicked[sender] => move |_| {
-                    //         sender.input(AppMsg::Quit);
-                    //     },
-                    // },
-                    // add_overlay = &gtk::Box {
-                    //     set_halign: gtk::Align::End,
-                    //     set_valign: gtk::Align::Start,
-                    //     set_overflow: gtk::Overflow::Visible,
-                    //     gtk::Button {
-                    //         set_css_classes: &["app-bar-button", "circular"],
-                    //         set_label: "Test",
-                    //         set_icon_name: "window-close-symbolic",
-                    //         connect_clicked[sender] => move |_| {
-                    //             // request exit
-                    //             sender.input(AppMsg::Quit);
-                    //         },
-                    //     },
-                    // },
                     add_overlay: search_bar,
 
                     #[wrap(Some)]
@@ -194,15 +171,17 @@ impl SimpleComponent for MainWindow {
                                 //     let menu: gtk4::gio::MenuModel = build_menu().into();
                                 //     menu
                                 // }),
+                                // 
+                                set_widget_name: "source_view",
+                                set_accessible_role: gtk::AccessibleRole::TextBox,
                             },
                         },
                     }, // gtk::Overlay
 
-                }, // gtk::Box
+                }, // gtk::Box 
                 #[name = "status_bar"]
-                // XXX: I don't think I'm supposed to use this BottomBar for this...
                 libhelium::BottomBar {
-                    set_css_classes: &["vim-status-bar"],
+                    set_css_classes: &["vim-status-bar", "compact"],
                     // set_align: gtk::Align::BaselineFill,
                     set_expand: false,
                     // set_: asdasd,
@@ -216,28 +195,32 @@ impl SimpleComponent for MainWindow {
                     ),
                     #[watch]
                     set_description: &format!("Line {}, Column {} | Characters: {}", model.line, model.column, model.char_count),
-                    // set_title: "Test",
-                    // set_t
-
-
-                    #[name = "status_menu"]
-                    set_child = &gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_spacing: 6,
-                        set_margin_all: 12,
-
-                        #[name = "open_button_shortcut"]
-                        prepend = &libhelium::Button {
-                            set_is_pill: true,
-                            set_is_tint: true,
-                            set_css_classes: &["app-bar-button", "rounded"],
-                            set_tooltip_text: Some("Open file..."),
-                            // set_label: "Open",
-                            set_icon_name: "document-open-symbolic",
-                            set_is_iconic: true,
-                            connect_clicked[sender] => move |_| {
-                                sender.input(AppMsg::Open);
-                            },
+                    set_widget_name: "status_bar",
+                    #[name = "open_button_shortcut"]
+                    prepend_button[libhelium::BottomBarPosition::Left] = &libhelium::Button {
+                        set_is_pill: true,
+                        set_is_tint: true,
+                        set_css_classes: &["app-bar-button", "rounded"],
+                        set_tooltip_text: Some("Open file..."),
+                        // set_label: "Open",
+                        set_icon_name: "document-open-symbolic",
+                        set_is_iconic: true,
+                        connect_clicked[sender] => move |_| {
+                            sender.input(AppMsg::Open);
+                        },
+                    },
+                    
+                    #[name = "search_button_shortcut"]
+                    append_button[libhelium::BottomBarPosition::Right] = &libhelium::Button {
+                        set_is_pill: true,
+                        set_is_tint: true,
+                        set_css_classes: &["app-bar-button", "rounded"],
+                        set_tooltip_text: Some("Search..."),
+                        // set_label: "Search",
+                        set_icon_name: "edit-find-symbolic",
+                        set_is_iconic: true,
+                        connect_clicked[sender] => move |_| {
+                            sender.input(AppMsg::Find);
                         },
                     },
                 }, // libhelium::BottomBar
@@ -654,8 +637,8 @@ fn build_menu() -> gio::Menu {
 
     help_menu.append_item(&gio::MenuItem::new(Some("About"), Some("app.about")));
 
-    menu.append_submenu(Some("Enigmata"), &enigmata_menu);
     menu.append_submenu(Some("File"), &file_menu);
+    menu.append_submenu(Some("View"), &enigmata_menu);
     menu.append_submenu(Some("Help"), &help_menu);
 
     menu
